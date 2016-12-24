@@ -30,6 +30,12 @@ int c = HIGH;
 unsigned long debounceTime = 0;
 unsigned long debounceDelay = 2;
 
+void setBrightness(Adafruit_SSD1306 display, uint8_t brightness)
+{
+    display.ssd1306_command(SSD1306_SETCONTRAST);
+    display.ssd1306_command(brightness);
+}
+
 void setup()   {                
   Serial.begin(19200);
 
@@ -57,9 +63,23 @@ void loop() {
       switch (receivedCommand[0]) {
         case 'C':
           display.clearDisplay();
-          display.setTextSize(4);
+          display.setRotation(2); 
           display.setTextColor(WHITE);
+          setBrightness(display, 0x80);
+          display.setTextSize(4);  
           display.setCursor(5,18);
+          display.print(receivedCommand+1);
+          display.display();
+          Serial.println("K");
+          break;
+
+        case 'N':
+          display.clearDisplay();
+          display.setRotation(2); 
+          display.setTextColor(WHITE);
+          setBrightness(display, 0);
+          display.setTextSize(2);  
+          display.setCursor(20,50);
           display.print(receivedCommand+1);
           display.display();
           Serial.println("K");

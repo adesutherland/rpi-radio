@@ -423,6 +423,7 @@ int main(int argc, char **argv)
         display.setTextColor(WHITE);
         if ( (timeinfo->tm_hour > 6 && timeinfo->tm_hour < 21) ) {
 		  // Daytime
+		  display.setBrightness(0x80);
           display.setTextSize(4);  
           display.setCursor(5,18);
           display.print(timeText);
@@ -430,15 +431,13 @@ int main(int argc, char **argv)
 		}
 		else {
 		  // Nighttime
+		  display.setBrightness(0);
           display.setTextSize(2);  
           display.setCursor(20,50);
           display.print(timeText);
           sendNightTime(tty_fd, timeText);
 		}
 
-
-
-        
 
 
 //        #define CLOCK_X 100
