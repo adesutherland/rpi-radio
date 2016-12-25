@@ -2,6 +2,7 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include<stdlib.h>
 
 #define OLED_RESET 4
 Adafruit_SSD1306 display(OLED_RESET);
@@ -9,6 +10,10 @@ Adafruit_SSD1306 display(OLED_RESET);
 #if (SSD1306_LCDHEIGHT != 64)
 #error("Height incorrect, please fix Adafruit_SSD1306.h!");
 #endif
+
+#define CLOCK_X 75
+#define CLOCK_Y 56
+#define CLOCK_HRAD 7
 
 const byte maxSize = 100;
 char receivedCommand[maxSize+1];
@@ -55,13 +60,18 @@ void setup()   {
 }
 
 void loop() {
-  
+   float angle;
+   int x;
+   int y;
+   int m;
+   int h;
+
    readCommand();
 
    if (newCommand) {
       newCommand = false;
       switch (receivedCommand[0]) {
-        case 'C':
+        case 'C': // Normal Clock
           display.clearDisplay();
           display.setRotation(2); 
           display.setTextColor(WHITE);
@@ -73,7 +83,7 @@ void loop() {
           Serial.println("K");
           break;
 
-        case 'N':
+        case 'N': // Nighttime Clock
           display.clearDisplay();
           display.setRotation(2); 
           display.setTextColor(WHITE);
@@ -81,6 +91,32 @@ void loop() {
           display.setTextSize(2);  
           display.setCursor(20,50);
           display.print(receivedCommand+1);
+          display.display();
+          Serial.println("K");
+          break;
+
+        case 'H': // Hour Hand Only
+          display.clearDisplay();
+          display.setRotation(2); 
+          display.setTextColor(WHITE);
+          setBrightness(display, 0);
+          receivedCommand[3]=0;
+          h = atoi(receivedCommand+1);
+          m = atoi(receivedCommand+4);
+               
+          // display hour hand
+          angle = h*30 + int((m / 12) * 6 )   ;
+          angle = (angle/57.29577951) ; // radians  
+          x = (CLOCK_X + (sin(angle)*CLOCK_HRAD));
+          y = (CLOCK_Y - (cos(angle)*CLOCK_HRAD));
+          display.drawLine(CLOCK_X, CLOCK_Y, x, y, WHITE);			
+          display.display();
+          Serial.println("K");
+          break;
+
+        case 'D': // Dark
+          display.clearDisplay();
+          setBrightness(display, 0);
           display.display();
           Serial.println("K");
           break;

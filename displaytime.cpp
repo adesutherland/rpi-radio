@@ -169,6 +169,19 @@ int sendNightTime(int filedesc, const char* command) {
    return readResponse(filedesc, 3);
 }
 
+int sendHourHand(int filedesc, const char* command) {
+   write(filedesc, "H", 1);
+   write(filedesc, command, strlen(command));
+   write(filedesc, "\n", 1);
+   return readResponse(filedesc, 3);
+}
+
+int sendDark(int filedesc) {
+   write(filedesc, "D", 1);
+   write(filedesc, "\n", 1);
+   return readResponse(filedesc, 3);
+}
+
 int connect(const char* device) {
    struct termios tio;
    int tty_fd;
@@ -417,26 +430,48 @@ int main(int argc, char **argv)
 
 	  if (respRC == 0 || (60-timeinfo->tm_sec == 0)) { // respRC==0 means readResponse() timed out so the minute is up and we need to update the clock	
 	    display.clearDisplay();
-//	    display.setBrightness(0);
-//	    display.setBrightness(0x80);
 	    display.setRotation(2); 
         display.setTextColor(WHITE);
-        if ( (timeinfo->tm_hour > 6 && timeinfo->tm_hour < 21) ) {
-		  // Daytime
+        
+        if ( (timeinfo->tm_hour > 6 && timeinfo->tm_hour < 20) ) {
+		  // Daytime 
 		  display.setBrightness(0x80);
           display.setTextSize(4);  
           display.setCursor(5,18);
           display.print(timeText);
-          sendDayTime(tty_fd, timeText);
-		}
-		else {
-		  // Nighttime
+
+          sendDayTime(tty_fd, timeText);        
+	    }
+        
+        else if ( (timeinfo->tm_hour >= 20 && timeinfo->tm_hour < 22) ) {
+		  // Dusk
 		  display.setBrightness(0);
           display.setTextSize(2);  
           display.setCursor(20,50);
           display.print(timeText);
           sendNightTime(tty_fd, timeText);
-		}
+        }
+         
+         else {
+		   // Night 
+          #define CLOCK_X 75
+          #define CLOCK_Y 56
+          #define CLOCK_HRAD 7
+          float angle;
+          int x;
+          int y;
+               
+          // display hour hand
+          angle = timeinfo->tm_hour * 30 + int((timeinfo->tm_min / 12) * 6 )   ;
+          angle = (angle/57.29577951) ; // radians  
+          x = (CLOCK_X + (sin(angle)*CLOCK_HRAD));
+          y = (CLOCK_Y - (cos(angle)*CLOCK_HRAD));
+
+          display.setBrightness(0);
+          display.drawLine(CLOCK_X, CLOCK_Y, x, y, WHITE);			
+//          sendHourHand(tty_fd, timeText);
+          sendDark(tty_fd);
+	     }
 
 
 
