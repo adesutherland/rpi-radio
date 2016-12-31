@@ -432,8 +432,8 @@ int main(int argc, char **argv)
 	    display.clearDisplay();
 	    display.setRotation(2); 
         display.setTextColor(WHITE);
-        
-        if ( (timeinfo->tm_hour > 6 && timeinfo->tm_hour < 20) ) {
+         
+        if ( (timeinfo->tm_hour >= 7 && timeinfo->tm_hour < 20) ) {
 		  // Daytime 
 		  display.setBrightness(0x80);
           display.setTextSize(4);  
@@ -443,18 +443,29 @@ int main(int argc, char **argv)
           sendDayTime(tty_fd, timeText);        
 	    }
         
+        else if ( (timeinfo->tm_hour >= 6 && timeinfo->tm_hour < 7) ) {
+		  // Dawn
+		  display.setBrightness(0);
+          display.setTextSize(2);  
+          display.setCursor(35,50);
+          display.print(timeText);
+
+          sendNightTime(tty_fd, timeText);
+        }
+         
         else if ( (timeinfo->tm_hour >= 20 && timeinfo->tm_hour < 22) ) {
 		  // Dusk
 		  display.setBrightness(0);
           display.setTextSize(2);  
-          display.setCursor(20,50);
+          display.setCursor(35,50);
           display.print(timeText);
+
           sendNightTime(tty_fd, timeText);
         }
          
          else {
 		   // Night 
-          #define CLOCK_X 75
+          #define CLOCK_X 65
           #define CLOCK_Y 56
           #define CLOCK_HRAD 7
           float angle;
@@ -462,58 +473,19 @@ int main(int argc, char **argv)
           int y;
                
           // display hour hand
-          angle = timeinfo->tm_hour * 30 + int((timeinfo->tm_min / 12) * 6 )   ;
-          angle = (angle/57.29577951) ; // radians  
-          x = (CLOCK_X + (sin(angle)*CLOCK_HRAD));
-          y = (CLOCK_Y - (cos(angle)*CLOCK_HRAD));
+          angle = (timeinfo->tm_hour * 30) + (timeinfo->tm_min / 2);
+          angle = angle / 57.296; // radians  
+          x = sin(angle)*CLOCK_HRAD;
+          y = cos(angle)*CLOCK_HRAD;
 
           display.setBrightness(0);
-          display.drawLine(CLOCK_X, CLOCK_Y, x, y, WHITE);			
+          display.drawLine(CLOCK_X - x, CLOCK_Y + y, CLOCK_X + x, CLOCK_Y - y, WHITE);			
+
 //          sendHourHand(tty_fd, timeText);
-          sendDark(tty_fd);
-	     }
-
-
-
-//        #define CLOCK_X 100
-//        #define CLOCK_Y 56
-//        #define CLOCK_MRAD 7
-//        #define CLOCK_HRAD 4
- //       float angle;
- //       int x;
- //       int y;
-        
-        // clock ticks
-        /*
-        for( int z=0; z < 360; z= z + 90 ) {
-          angle=((float)z/57.29577951) ; //Convert degrees to radians
-          x = (CLOCK_X + (sin(angle)*CLOCK_MRAD));
-          y = (CLOCK_Y - (cos(angle)*CLOCK_MRAD));
-          display.drawPixel(x, y, WHITE);
-        }
-        */
-//        display.drawCircle(CLOCK_X, CLOCK_Y, CLOCK_MRAD, WHITE);
-        
-        // display minute hand
-        /*
-        angle = timeinfo->tm_min * 6 ;
-        angle = (angle/57.29577951); // radians  
-        x = (CLOCK_X + (sin(angle)*CLOCK_MRAD));
-        y = (CLOCK_Y - (cos(angle)*CLOCK_MRAD));
-        display.drawLine(CLOCK_X, CLOCK_Y, x, y, WHITE);
-        */
-        
-        // display hour hand
- //       angle = timeinfo->tm_hour * 30 + int((timeinfo->tm_min / 12) * 6 )   ;
- //       angle = (angle/57.29577951) ; // radians  
-//        x = (CLOCK_X + (sin(angle)*CLOCK_HRAD));
-//        y = (CLOCK_Y - (cos(angle)*CLOCK_HRAD));
-//        x = (CLOCK_X + (sin(angle)*CLOCK_MRAD));
-//        y = (CLOCK_Y - (cos(angle)*CLOCK_MRAD));
-//        display.drawLine(CLOCK_X, CLOCK_Y, x, y, WHITE);
+          sendDark(tty_fd);          
+	    }
 
         display.display();
-
 	  } 
      
       // sleep until the next minute starts (i.e. likely after 60 seconds)

@@ -11,7 +11,7 @@ Adafruit_SSD1306 display(OLED_RESET);
 #error("Height incorrect, please fix Adafruit_SSD1306.h!");
 #endif
 
-#define CLOCK_X 75
+#define CLOCK_X 65
 #define CLOCK_Y 56
 #define CLOCK_HRAD 7
 
@@ -89,7 +89,7 @@ void loop() {
           display.setTextColor(WHITE);
           setBrightness(display, 0);
           display.setTextSize(2);  
-          display.setCursor(20,50);
+          display.setCursor(35,50);
           display.print(receivedCommand+1);
           display.display();
           Serial.println("K");
@@ -105,11 +105,11 @@ void loop() {
           m = atoi(receivedCommand+4);
                
           // display hour hand
-          angle = h*30 + int((m / 12) * 6 )   ;
-          angle = (angle/57.29577951) ; // radians  
-          x = (CLOCK_X + (sin(angle)*CLOCK_HRAD));
-          y = (CLOCK_Y - (cos(angle)*CLOCK_HRAD));
-          display.drawLine(CLOCK_X, CLOCK_Y, x, y, WHITE);			
+          angle = (h*30) + (m/2);
+          angle = angle/57.296; // radians  
+          x = sin(angle)*CLOCK_HRAD;
+          y = cos(angle)*CLOCK_HRAD;
+          display.drawLine(CLOCK_X - x, CLOCK_Y + y, CLOCK_X + x, CLOCK_Y - y, WHITE);
           display.display();
           Serial.println("K");
           break;
