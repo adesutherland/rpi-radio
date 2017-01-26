@@ -104,7 +104,9 @@ public:
   
   // Convinient Functions
   int login(std::string userid, std::string password);
+  int login();
   int onlineLogin(std::string userid, std::string password);
+  int onlineLogin();
   int logout();
   int loadUsersPlaylists(std::list<std::string> &playlists);
   sp_error loadPlaylist(sp_playlist* playlist);

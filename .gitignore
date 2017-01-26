@@ -28,7 +28,7 @@
 *.out
 *.app
 displaytime
-test
+spotify/spotifyplayer
 
 # IDE Stuff
 *.geany

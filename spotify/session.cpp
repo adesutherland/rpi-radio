@@ -82,6 +82,24 @@ int SessionWrapper::login(std::string userid, std::string password) {
   return 0;
 }
 
+int SessionWrapper::login() {
+  class : public Workflow {
+    void logged_in() {
+      Workflow::logged_in();
+      workflowDone();
+    }
+  } loginWorkflow;
+  
+  sp_session_relogin(getSession());
+
+  loginWorkflow.run();
+  if (loginWorkflow.getHadError()) {
+    cerr << "Error: " << loginWorkflow.getErrorText() << endl;
+    return -1;
+  }
+  return 0;
+}
+
 int SessionWrapper::onlineLogin(std::string userid, std::string password) {
   class : public Workflow {
     void logged_in() {
@@ -98,6 +116,31 @@ int SessionWrapper::onlineLogin(std::string userid, std::string password) {
   } loginWorkflow;
   
   sp_session_login(getSession(), userid.c_str(), password.c_str(), true, NULL);
+
+  loginWorkflow.run();
+  if (loginWorkflow.getHadError()) {
+    cerr << "Error: " << loginWorkflow.getErrorText() << endl;
+    return -1;
+  }
+  return 0;
+}
+
+int SessionWrapper::onlineLogin() {
+  class : public Workflow {
+    void logged_in() {
+      Workflow::logged_in();
+      if (sp_session_connectionstate(getSession()) == SP_CONNECTION_STATE_LOGGED_IN) {
+        workflowDone();
+      }
+    }
+    void connectionstate_updated() {
+      if (sp_session_connectionstate(getSession()) == SP_CONNECTION_STATE_LOGGED_IN) {
+        workflowDone();
+      }
+    }
+  } loginWorkflow;
+  
+  sp_session_relogin(getSession());
 
   loginWorkflow.run();
   if (loginWorkflow.getHadError()) {
@@ -154,7 +197,6 @@ int SessionWrapper::loadUsersPlaylists(list<string> &playlists) {
       return -1;
     }
   }
-  
   
   string name;
   list<string> dirPath;

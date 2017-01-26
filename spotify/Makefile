@@ -1,5 +1,5 @@
-TARGET=test
-OBJS += test.o session.o workflow.o event.o getmacaddress.o
+TARGET = spotifyplayer
+OBJS += spotifyplayer.o session.o workflow.o event.o getmacaddress.o
 
 CFLAGS  += -g
 CFLAGS  += $(shell pkg-config --cflags libspotify)
@@ -17,7 +17,7 @@ CXXFLAGS += -Wall
 
 all:	$(TARGET)
 
-test.o: test.cpp spotifywrapper.h
+spotifyplayer.o: spotifyplayer.cpp spotifywrapper.h
 
 session.o: session.cpp spotifywrapper.h
 
