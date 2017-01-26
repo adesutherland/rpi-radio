@@ -28,6 +28,10 @@
 *.out
 *.app
 displaytime
+test
+
+# IDE Stuff
+*.geany
 
 # Spotify App Key
 appkey.c
