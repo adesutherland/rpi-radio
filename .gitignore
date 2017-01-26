@@ -29,5 +29,8 @@
 *.app
 displaytime
 
+# Spotify App Key
+appkey.c
+
 # Temp files
 *~
