@@ -23,36 +23,34 @@ Workflow::Workflow() {
   eventHandlers[9] = &Workflow::end_of_track;
   eventHandlers[10] = &Workflow::streaming_error;
   eventHandlers[11] = &Workflow::userinfo_updated;
-  eventHandlers[12] = &Workflow::start_playback;
-  eventHandlers[13] = &Workflow::stop_playback;
-  eventHandlers[14] = &Workflow::offline_status_updated;
-  eventHandlers[15] = &Workflow::offline_error;
-  eventHandlers[16] = &Workflow::credentials_blob_updated;
-  eventHandlers[17] = &Workflow::connectionstate_updated;
-  eventHandlers[18] = &Workflow::unaccepted_licenses_updated;
-  eventHandlers[19] = &Workflow::scrobble_error;
-  eventHandlers[20] = &Workflow::private_session_mode_changed;
+  eventHandlers[12] = &Workflow::offline_status_updated;
+  eventHandlers[13] = &Workflow::offline_error;
+  eventHandlers[14] = &Workflow::credentials_blob_updated;
+  eventHandlers[15] = &Workflow::connectionstate_updated;
+  eventHandlers[16] = &Workflow::unaccepted_licenses_updated;
+  eventHandlers[17] = &Workflow::scrobble_error;
+  eventHandlers[18] = &Workflow::private_session_mode_changed;
   
   // Playlist Container
-  eventHandlers[21] = &Workflow::playlist_added;
-  eventHandlers[22] = &Workflow::playlist_removed;  
-  eventHandlers[23] = &Workflow::playlist_moved;  
-  eventHandlers[24] = &Workflow::container_loaded;
+  eventHandlers[19] = &Workflow::playlist_added;
+  eventHandlers[20] = &Workflow::playlist_removed;  
+  eventHandlers[21] = &Workflow::playlist_moved;  
+  eventHandlers[22] = &Workflow::container_loaded;
   
   // Playlist
-  eventHandlers[25] = &Workflow::tracks_added;
-  eventHandlers[26] = &Workflow::tracks_removed;
-  eventHandlers[27] = &Workflow::tracks_moved;
-  eventHandlers[28] = &Workflow::playlist_renamed;
-  eventHandlers[29] = &Workflow::playlist_state_changed;
-  eventHandlers[30] = &Workflow::playlist_update_in_progress;
-  eventHandlers[31] = &Workflow::playlist_metadata_updated;
-  eventHandlers[32] = &Workflow::track_created_changed;
-  eventHandlers[33] = &Workflow::track_seen_changed;
-  eventHandlers[34] = &Workflow::description_changed;
-  eventHandlers[35] = &Workflow::image_changed;
-  eventHandlers[36] = &Workflow::track_message_changed;
-  eventHandlers[37] = &Workflow::subscribers_changed;
+  eventHandlers[23] = &Workflow::tracks_added;
+  eventHandlers[24] = &Workflow::tracks_removed;
+  eventHandlers[25] = &Workflow::tracks_moved;
+  eventHandlers[26] = &Workflow::playlist_renamed;
+  eventHandlers[27] = &Workflow::playlist_state_changed;
+  eventHandlers[28] = &Workflow::playlist_update_in_progress;
+  eventHandlers[29] = &Workflow::playlist_metadata_updated;
+  eventHandlers[30] = &Workflow::track_created_changed;
+  eventHandlers[31] = &Workflow::track_seen_changed;
+  eventHandlers[32] = &Workflow::description_changed;
+  eventHandlers[33] = &Workflow::image_changed;
+  eventHandlers[34] = &Workflow::track_message_changed;
+  eventHandlers[35] = &Workflow::subscribers_changed;
 }
 
 Event* Workflow::getCurrentEvent() {
@@ -98,7 +96,7 @@ void Workflow::run() {
     Event event = Event::getNextEvent();
     currentEvent = &event;
     Event::Action action = event.getAction();
-    cout << "Event: " << Event::ActionNames[action] << endl; 
+// cout << "Event: " << Event::ActionNames[action] << endl; 
     
     // Call event handler
     (this->*eventHandlers[action])();
@@ -167,14 +165,6 @@ void Workflow::streaming_error() {
 void Workflow::userinfo_updated() {
 }
 
-void Workflow::start_playback() {
-// TODO - this should not be an event - audio streaiming
-}
-
-void Workflow::stop_playback() {
-// TODO - this should not be an event - audio streaiming
-}
-
 void Workflow::offline_status_updated() {
 }
 
@@ -196,7 +186,7 @@ void Workflow::connectionstate_updated() {
 }
 
 void Workflow::unaccepted_licenses_updated() {
-  // TODO - Complexx - lets hope we never have to do it!
+  // TODO - Complex - lets hope we never have to do it!
 }
 
 void Workflow::scrobble_error() {

@@ -1,5 +1,5 @@
 TARGET = spotifyplayer
-OBJS += spotifyplayer.o session.o workflow.o event.o getmacaddress.o
+OBJS += spotifyplayer.o session.o workflow.o event.o getmacaddress.o soundiodriver.o dummydriver.o
 
 CFLAGS  += -g
 CFLAGS  += $(shell pkg-config --cflags libspotify)
@@ -17,7 +17,11 @@ CXXFLAGS += -Wall
 
 all:	$(TARGET)
 
-spotifyplayer.o: spotifyplayer.cpp spotifywrapper.h
+spotifyplayer.o: spotifyplayer.cpp spotifywrapper.h soundiodriver.h dummydriver.h
+
+soundiodriver.o: soundiodriver.cpp spotifywrapper.h soundiodriver.h
+
+dummydriver.o: dummydriver.cpp spotifywrapper.h dummydriver.h
 
 session.o: session.cpp spotifywrapper.h
 

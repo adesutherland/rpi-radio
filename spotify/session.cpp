@@ -28,8 +28,6 @@ SessionWrapper::SessionWrapper() {
   session_callbacks.end_of_track = end_of_track;
   session_callbacks.streaming_error = streaming_error;
   session_callbacks.userinfo_updated = userinfo_updated;
-  session_callbacks.start_playback = start_playback;
-  session_callbacks.stop_playback = stop_playback;
   session_callbacks.offline_status_updated = offline_status_updated;
   session_callbacks.offline_error = offline_error;
   session_callbacks.credentials_blob_updated = credentials_blob_updated;
@@ -41,6 +39,8 @@ SessionWrapper::SessionWrapper() {
   // Session Callbacks for the music playing system - No events
   session_callbacks.get_audio_buffer_stats = get_audio_buffer_stats; 
   session_callbacks.music_delivery = music_delivery;
+  session_callbacks.start_playback = start_playback;
+  session_callbacks.stop_playback = stop_playback;
 
   // Playlist Container Callbacks
   playlistcontainer_callbacks.playlist_added = playlist_added;
@@ -159,6 +159,10 @@ int SessionWrapper::logout() {
   
   sp_session_logout(getSession());
   logoutWorkflow.run();
+
+  // Done with Audio
+  audioDriver->done();
+
   if (logoutWorkflow.getHadError()) {
     cerr << "Error: " << logoutWorkflow.getErrorText() << endl;
     return -1;
@@ -166,8 +170,7 @@ int SessionWrapper::logout() {
   return 0;
 }
 
-int SessionWrapper::loadUsersPlaylists(list<string> &playlists) {
-  
+int SessionWrapper::loadPlaylistContainer() {
   // Setup Container
   if (!playlistContainer) {
     playlistContainer = sp_session_playlistcontainer(session);
@@ -193,16 +196,24 @@ int SessionWrapper::loadUsersPlaylists(list<string> &playlists) {
     } workflow;
     workflow.run();
     if (workflow.getHadError()) {
-      cerr << "Error: " << workflow.getErrorText() << endl;
+      cerr << "Error loading playlist container: " << workflow.getErrorText() << endl;
       return -1;
     }
   }
-  
+  return 0;
+}
+
+int SessionWrapper::loadUsersPlaylists(list<string> &playlists) {
   string name;
   list<string> dirPath;
   char buffer[100];
   sp_playlist* playlist;
   sp_error error;
+  
+  // Load Container
+  if (loadPlaylistContainer()) {
+    return -1;
+  }
   
   int num = sp_playlistcontainer_num_playlists(playlistContainer); 	
   for (int n=0; n<num; n++) {
@@ -213,7 +224,7 @@ int SessionWrapper::loadUsersPlaylists(list<string> &playlists) {
         name.clear();
         for (list<string>::const_iterator i = dirPath.begin(); i != dirPath.end(); ++i) {
           name.append(*i);
-          name.append(".");
+          name.append(" / ");
         }
         
         playlist = sp_playlistcontainer_playlist(playlistContainer, n);
@@ -224,18 +235,15 @@ int SessionWrapper::loadUsersPlaylists(list<string> &playlists) {
         }
         name.append(sp_playlist_name(playlist));
         playlists.push_back(name);
-cout << "Playlist: " << name << endl;
         break;
 
       case SP_PLAYLIST_TYPE_START_FOLDER: // Marks a folder starting point
         sp_playlistcontainer_playlist_folder_name(playlistContainer, n, buffer, sizeof(buffer));
         dirPath.push_back(buffer);
-cout << "Folder: " << buffer << endl;        
         break;
 
       case SP_PLAYLIST_TYPE_END_FOLDER: // Folder ending point
         dirPath.pop_back();
-cout << "Folder End" << endl;
         break;
       
       case SP_PLAYLIST_TYPE_PLACEHOLDER: // Unknown entry
@@ -249,7 +257,6 @@ cout << "Folder End" << endl;
 }
 
 sp_error SessionWrapper::loadPlaylist(sp_playlist* playlist) {
-cout << "Loading Playlist" << endl ; 
   if (sp_playlist_is_loaded(playlist)) {
     return SP_ERROR_OK;
   }
@@ -271,18 +278,147 @@ cout << "Loading Playlist" << endl ;
   } workflow;
   workflow.workflowPlaylist = playlist;
   workflow.run();
-  if (workflow.getHadError()) {
-    cerr << "Error waiting for playlist to load: " << workflow.getErrorText() << endl;
-    return workflow.getSpotifyError();
-  }
-  
+
   sp_playlist_remove_callbacks(playlist, &playlist_callbacks, NULL);
   if (error != SP_ERROR_OK) {
     cerr << "Error removing playlist callbacks: " << sp_error_message(error) << endl;
     return error;
+  }  
+  
+  if (workflow.getHadError()) {
+    cerr << "Error waiting for playlist to load: " << workflow.getErrorText() << endl;
+    return workflow.getSpotifyError();
+  }
+    
+  return SP_ERROR_OK;
+}
+
+
+sp_playlist* SessionWrapper::getPlaylistByName(string playlistName) {  
+  string name;
+  list<string> dirPath;
+  char buffer[100];
+  sp_playlist* playlist;
+  sp_error error;
+  
+  // Load Container
+  if (loadPlaylistContainer()) {
+    return NULL;
+  }
+  
+  int num = sp_playlistcontainer_num_playlists(playlistContainer); 	
+  for (int n=0; n<num; n++) {
+    sp_playlist_type type = sp_playlistcontainer_playlist_type(playlistContainer, n);
+    switch (type) {
+      case SP_PLAYLIST_TYPE_PLAYLIST: // Normal Playlist
+        // Directory
+        name.clear();
+        for (list<string>::const_iterator i = dirPath.begin(); i != dirPath.end(); ++i) {
+          name.append(*i);
+          name.append(" / ");
+        }
+        
+        playlist = sp_playlistcontainer_playlist(playlistContainer, n);
+        error = loadPlaylist(playlist);
+        if (error != SP_ERROR_OK) {
+          cerr << "Error loading playlist: " << sp_error_message(error) << endl;
+          return NULL;
+        }
+        name.append(sp_playlist_name(playlist));
+        if (playlistName.compare(name) == 0) {
+          return playlist;
+        }
+        break;
+
+      case SP_PLAYLIST_TYPE_START_FOLDER: // Marks a folder starting point
+        sp_playlistcontainer_playlist_folder_name(playlistContainer, n, buffer, sizeof(buffer));
+        dirPath.push_back(buffer);
+        break;
+
+      case SP_PLAYLIST_TYPE_END_FOLDER: // Folder ending point
+        dirPath.pop_back();
+        break;
+      
+      case SP_PLAYLIST_TYPE_PLACEHOLDER: // Unknown entry
+      
+      default:
+        ;
+    }
+  }
+  
+  return NULL;
+}
+
+int SessionWrapper::loadPlaylistTracks(string playlistName, std::list<std::string> &tracks){
+  sp_playlist* playlist = getPlaylistByName(playlistName);
+  if (!playlist) return -1;
+  
+  int num = sp_playlist_num_tracks(playlist); 	
+  for (int n = 0; n < num; n++) {
+    sp_track *track = sp_playlist_track(playlist, n);
+    sp_error error = loadTrack(track);
+    if (error != SP_ERROR_OK) {
+      cerr << "Error loading track: " << sp_error_message(error) << endl;
+      return -1;
+    }
+    tracks.push_back(sp_track_name(track));
+  }
+  return 0;
+}
+
+sp_error SessionWrapper::loadTrack(sp_track* track){
+
+  if (sp_track_is_loaded(track)) {
+    return SP_ERROR_OK;
+  }
+  
+  // Wait until loaded
+  class : public Workflow {
+    public:
+    sp_track* workflowTrack;
+    void nothing() { // It seems there is no specific callback to listen for!
+      if (sp_track_is_loaded(workflowTrack)) {
+        workflowDone();
+      } 
+    }
+  } workflow;
+  workflow.workflowTrack = track;
+  workflow.run();
+  if (workflow.getHadError()) {
+    cerr << "Error waiting for track to load: " << workflow.getErrorText() << endl;
+    return workflow.getSpotifyError();
   }
   
   return SP_ERROR_OK;
+}
+
+int SessionWrapper::playTrack(sp_session *session, sp_track *track) {
+  sp_error error;
+ 
+  error = sp_session_player_load(session, track);	 
+  if (error != SP_ERROR_OK) {
+    cerr << "Error player_loading: " << sp_error_message(error) << endl;
+    return -1;
+  }
+
+  error = sp_session_player_play(session, true);
+  if (error != SP_ERROR_OK) {
+    cerr << "Error playing: " << sp_error_message(error) << endl;
+    return -1;
+  }
+
+  // Wait until played
+  class : public Workflow {
+    void end_of_track() { 
+      workflowDone();
+    }
+  } workflow;
+  workflow.run();
+  if (workflow.getHadError()) {
+    cerr << "Error waiting for track to play: " << workflow.getErrorText() << endl;
+    return -1;
+  }
+  return 0;
 }
 
 sp_session* SessionWrapper::getSession() {
@@ -293,9 +429,10 @@ SessionWrapper* SessionWrapper::getSessionWrapper() {
   return singleton;
 }
 
-sp_error SessionWrapper::create() {
+sp_error SessionWrapper::create(BaseAudioDriver *driver) {
   sp_error error;
   session = NULL;
+  audioDriver = driver;
   
   // Default Session Config
   session_config.api_version          = SPOTIFY_API_VERSION;
@@ -310,6 +447,9 @@ sp_error SessionWrapper::create() {
 
   configureSession(session_config);
   session_config.callbacks            = &session_callbacks;
+  
+  // Init Audio
+  audioDriver->init(this);
   
   // Create Session
   error = sp_session_create(&session_config, &session);
@@ -377,14 +517,6 @@ void SessionWrapper::userinfo_updated(sp_session *session) {
   Event::queueEvent(Event::userinfo_updated);
 }
 
-void SessionWrapper::start_playback(sp_session *session) {
-  Event::queueEvent(Event::start_playback);
-}
-
-void SessionWrapper::stop_playback(sp_session *session) {
-  Event::queueEvent(Event::stop_playback);
-}
-
 void SessionWrapper::offline_status_updated(sp_session *session) {
   Event::queueEvent(Event::offline_status_updated);
 }
@@ -414,12 +546,19 @@ void SessionWrapper::private_session_mode_changed(sp_session *session, bool is_p
 }
 
 void SessionWrapper::get_audio_buffer_stats(sp_session *session, sp_audio_buffer_stats *stats) {
-  // TODO
+  singleton->audioDriver->get_audio_buffer_stats(session, stats);
 }
 
 int SessionWrapper::music_delivery(sp_session *session, const sp_audioformat *format, const void *frames, int num_frames) {
-  // TODO
-  return 0;
+  return singleton->audioDriver->music_delivery(session, format, frames, num_frames);
+}
+
+void SessionWrapper::start_playback(sp_session *session) {
+  singleton->audioDriver->start_playback(session);
+}
+
+void SessionWrapper::stop_playback(sp_session *session) {
+  singleton->audioDriver->stop_playback(session);
 }
 
 // Playlist Container

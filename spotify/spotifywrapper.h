@@ -13,6 +13,8 @@
  * Handle callbacks / Events (back into the Spotify main thread)
  */
 
+class BaseAudioDriver;
+
 class Event {
   
 public:
@@ -30,8 +32,6 @@ public:
     end_of_track,
     streaming_error,
     userinfo_updated,
-    start_playback,
-    stop_playback,
     offline_status_updated,
     offline_error,
     credentials_blob_updated,
@@ -98,7 +98,7 @@ class SessionWrapper {
 public:
 
   SessionWrapper();
-  sp_error create();
+  sp_error create(BaseAudioDriver *driver);
   static sp_session* getSession();
   static SessionWrapper* getSessionWrapper();
   
@@ -108,8 +108,13 @@ public:
   int onlineLogin(std::string userid, std::string password);
   int onlineLogin();
   int logout();
+  int loadPlaylistContainer();
   int loadUsersPlaylists(std::list<std::string> &playlists);
   sp_error loadPlaylist(sp_playlist* playlist);
+  sp_playlist* getPlaylistByName(std::string playlistName);
+  int loadPlaylistTracks(std::string playlistName, std::list<std::string> &tracks);
+  sp_error loadTrack(sp_track* track);
+  int playTrack(sp_session *session, sp_track* track);
 
   // Session Callbacks 
   static void logged_in(sp_session *session, sp_error error);
@@ -123,8 +128,6 @@ public:
   static void end_of_track(sp_session *session);
   static void streaming_error(sp_session *session, sp_error error);
   static void userinfo_updated(sp_session *session);
-  static void start_playback(sp_session *session);
-  static void stop_playback(sp_session *session);
   static void offline_status_updated(sp_session *session);
   static void offline_error(sp_session *session, sp_error error);
   static void credentials_blob_updated(sp_session *session, const char *blob);
@@ -136,6 +139,8 @@ public:
   // Session Callbacks for the music playing system - No events
   static void get_audio_buffer_stats(sp_session *session, sp_audio_buffer_stats *stats);
   static int music_delivery(sp_session *session, const sp_audioformat *format, const void *frames, int num_frames);
+  static void start_playback(sp_session *session);
+  static void stop_playback(sp_session *session);
 
   // Playlist Containter callbacks
   static void playlist_added(sp_playlistcontainer *pc, sp_playlist *playlist, int position, void *userdata);
@@ -161,6 +166,7 @@ protected:
   virtual void configureSession(sp_session_config &session_config);
 
 private:
+  BaseAudioDriver *audioDriver;
   sp_session_callbacks session_callbacks;
   sp_playlistcontainer_callbacks playlistcontainer_callbacks;
   sp_playlist_callbacks playlist_callbacks;
@@ -213,8 +219,6 @@ protected:
   virtual void end_of_track();
   virtual void streaming_error();
   virtual void userinfo_updated();
-  virtual void start_playback();
-  virtual void stop_playback();
   virtual void offline_status_updated();
   virtual void offline_error();
   virtual void credentials_blob_updated();
@@ -251,6 +255,19 @@ private:
   std::string errorText;
   bool done;
   EventHandler eventHandlers[Event::ACTION_AT_THE_END];
+};
+
+class BaseAudioDriver {
+public:
+
+  virtual int init(SessionWrapper* session) = 0;
+  virtual int done() = 0;
+
+  // Session Callbacks for the music playing system
+  virtual void get_audio_buffer_stats(sp_session *session, sp_audio_buffer_stats *stats) = 0;
+  virtual int music_delivery(sp_session *session, const sp_audioformat *format, const void *frames, int num_frames) = 0;
+  virtual void start_playback(sp_session *session) = 0;
+  virtual void stop_playback(sp_session *session) = 0;
 };
 
 #endif

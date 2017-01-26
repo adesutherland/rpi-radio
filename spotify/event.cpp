@@ -22,8 +22,6 @@ const char *Event::ActionNames[] = {
   "end_of_track",
   "streaming_error",
   "userinfo_updated",
-  "start_playback",
-  "stop_playback",
   "offline_status_updated",
   "offline_error",
   "credentials_blob_updated",
@@ -79,6 +77,8 @@ void Event::queueEvent(Action action, std::string message) {
   queueEvent(event);
 }
 
+
+
 Event Event::getNextEvent() {
   // Get the next event (maybe after a wait)
   pthread_mutex_lock(&spotifyConditionMutex);
@@ -86,8 +86,19 @@ Event Event::getNextEvent() {
     struct timespec timeToWait;
     struct timeval now;
     gettimeofday(&now,NULL);
-    timeToWait.tv_sec = now.tv_sec + 1; // 1 Second timeout
-    timeToWait.tv_nsec = now.tv_usec * 1000; // tv_nsec is nano, tv_usec is micro {sigh}!
+    // Because waiting for tracks has not callback I need to loop quite fast
+    // I went for a 10th of a second - on the basis that
+    // 1. fast enough for humans
+    // 2. In a playlist we are not waiting for each one (they will have mostly all been loaded)
+    timeToWait.tv_sec = now.tv_sec; 
+    timeToWait.tv_nsec = (now.tv_usec + 100000UL) * 1000UL; // tv_nsec is nano, tv_usec is micro {sigh}!
+          
+    // Carry Seconds ...
+    #define BILLION 1000000000
+    if (timeToWait.tv_nsec >= BILLION) {
+        timeToWait.tv_nsec -= BILLION;
+        timeToWait.tv_sec++;
+    }
           
     int rc = pthread_cond_timedwait(&spotifyThreadCondition, &spotifyConditionMutex, &timeToWait);
     if (rc == ETIMEDOUT) {
