@@ -99,20 +99,26 @@ public:
 
   SessionWrapper();
   sp_error create(BaseAudioDriver *driver);
-  static sp_session* getSession();
+  sp_session* getSession();
   static SessionWrapper* getSessionWrapper();
+  BaseAudioDriver* getAudioDriver();
   
   // Convinient Functions
   int login(std::string userid, std::string password);
   int login();
   int onlineLogin(std::string userid, std::string password);
   int onlineLogin();
+  int listUnacceptedLicenses(std::list<std::string> &licenseIDs, std::list<std::string> &licenseUrls);
+  int acceptLicenses(std::list<std::string> &licenseIDs);
+  int wait(int milliseconds);
+  
   int logout();
   int loadPlaylistContainer();
   int loadUsersPlaylists(std::list<std::string> &playlists);
   sp_error loadPlaylist(sp_playlist* playlist);
   sp_playlist* getPlaylistByName(std::string playlistName);
   int loadPlaylistTracks(std::string playlistName, std::list<std::string> &tracks);
+  int loadPlaylistTracks(sp_playlist* playlist, std::list<std::string> &tracks);
   sp_error loadTrack(sp_track* track);
   int playTrack(sp_session *session, sp_track* track);
 
@@ -166,13 +172,13 @@ protected:
   virtual void configureSession(sp_session_config &session_config);
 
 private:
-  BaseAudioDriver *audioDriver;
+  BaseAudioDriver *audioDriver = NULL;
   sp_session_callbacks session_callbacks;
   sp_playlistcontainer_callbacks playlistcontainer_callbacks;
   sp_playlist_callbacks playlist_callbacks;
   sp_session_config session_config;
   static SessionWrapper* singleton; // libspotify can only handle one session ...
-  static sp_session* session;
+  sp_session* session;
   sp_playlistcontainer* playlistContainer = NULL;
 };
 
@@ -259,8 +265,9 @@ private:
 
 class BaseAudioDriver {
 public:
+  virtual ~BaseAudioDriver();
 
-  virtual int init(SessionWrapper* session) = 0;
+  virtual int init() = 0;
   virtual int done() = 0;
 
   // Session Callbacks for the music playing system
@@ -268,6 +275,12 @@ public:
   virtual int music_delivery(sp_session *session, const sp_audioformat *format, const void *frames, int num_frames) = 0;
   virtual void start_playback(sp_session *session) = 0;
   virtual void stop_playback(sp_session *session) = 0;
+  
+  virtual void heartBeat() = 0; // Called in the event loop several times a second
+
+protected:
+  BaseAudioDriver();
+
 };
 
 #endif

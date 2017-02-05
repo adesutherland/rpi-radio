@@ -1,6 +1,7 @@
 /* */
 #include <libspotify/api.h>
 #include "spotifywrapper.h"
+#include <sys/time.h>
 
 using namespace std;
 
@@ -8,12 +9,12 @@ string myMacEthernetAddress(); // in getmacaddress.cpp
 
 SessionWrapper* SessionWrapper::singleton = NULL;
 
-sp_session* SessionWrapper::session = NULL;
-
 SessionWrapper::SessionWrapper() {
   session = NULL;
   session_callbacks = (sp_session_callbacks){0};  
   session_config = (sp_session_config){0};
+  audioDriver = NULL;
+  
   singleton = this;
   
   // Session Callbacks  
@@ -64,6 +65,10 @@ SessionWrapper::SessionWrapper() {
   playlist_callbacks.subscribers_changed = subscribers_changed;  
 }
 
+BaseAudioDriver* SessionWrapper::getAudioDriver() {
+  return audioDriver;
+}
+
 int SessionWrapper::login(std::string userid, std::string password) {
   class : public Workflow {
     void logged_in() {
@@ -102,18 +107,22 @@ int SessionWrapper::login() {
 
 int SessionWrapper::onlineLogin(std::string userid, std::string password) {
   class : public Workflow {
+    public:
+    sp_session *session;
     void logged_in() {
       Workflow::logged_in();
-      if (sp_session_connectionstate(getSession()) == SP_CONNECTION_STATE_LOGGED_IN) {
+      if (sp_session_connectionstate(session) == SP_CONNECTION_STATE_LOGGED_IN) {
         workflowDone();
       }
     }
     void connectionstate_updated() {
-      if (sp_session_connectionstate(getSession()) == SP_CONNECTION_STATE_LOGGED_IN) {
+      if (sp_session_connectionstate(session) == SP_CONNECTION_STATE_LOGGED_IN) {
         workflowDone();
       }
     }
   } loginWorkflow;
+  loginWorkflow.session = getSession();
+  
   
   sp_session_login(getSession(), userid.c_str(), password.c_str(), true, NULL);
 
@@ -127,18 +136,21 @@ int SessionWrapper::onlineLogin(std::string userid, std::string password) {
 
 int SessionWrapper::onlineLogin() {
   class : public Workflow {
+    public:
+    sp_session *session;
     void logged_in() {
       Workflow::logged_in();
-      if (sp_session_connectionstate(getSession()) == SP_CONNECTION_STATE_LOGGED_IN) {
+      if (sp_session_connectionstate(session) == SP_CONNECTION_STATE_LOGGED_IN) {
         workflowDone();
       }
     }
     void connectionstate_updated() {
-      if (sp_session_connectionstate(getSession()) == SP_CONNECTION_STATE_LOGGED_IN) {
+      if (sp_session_connectionstate(session) == SP_CONNECTION_STATE_LOGGED_IN) {
         workflowDone();
       }
     }
   } loginWorkflow;
+  loginWorkflow.session = getSession();
   
   sp_session_relogin(getSession());
 
@@ -167,6 +179,72 @@ int SessionWrapper::logout() {
     cerr << "Error: " << logoutWorkflow.getErrorText() << endl;
     return -1;
   }
+  
+  // Wait for a couple of seconds to let libspotify to settle down
+  wait(2000);
+  return 0;
+}
+
+int SessionWrapper::wait(int milliseconds) {
+  
+  class : public Workflow {
+    struct timeval t1, t2;
+    int elapsedTime;
+    int waitFor;
+
+    public:
+      void init(int milliseconds) {
+        waitFor = milliseconds;
+        gettimeofday(&t1, NULL);
+      }
+    
+      void nothing() {
+        gettimeofday(&t2, NULL);
+        elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000.0;    // sec to ms
+        elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0; // us to ms
+        if (elapsedTime > waitFor) {
+          workflowDone();
+        } 
+      }
+  } workflow;
+  
+  workflow.init(milliseconds);
+  workflow.run();
+
+  if (workflow.getHadError()) {
+    cerr << "Error: " << workflow.getErrorText() << endl;
+    return -1;
+  }
+  return 0;
+}
+
+int SessionWrapper::listUnacceptedLicenses(list<string> &licenseIDs, list<string> &licenseUrls) {
+  int num = sp_session_num_unaccepted_licenses(getSession());
+  for (int i=0; i<num; i++) {
+    const char *id = sp_session_unaccepted_license_id	(getSession(), i);
+    const char *url = sp_session_url_for_license(getSession(), id);
+    licenseIDs.push_back(id);
+    licenseUrls.push_back(url);
+  }	 
+  return num;
+}
+
+int SessionWrapper::acceptLicenses(list<string> &licenseIDs) {
+  int num = licenseIDs.size();
+  const char** ids = new const char*[num];
+  int i = 0;
+  for (list<string>::const_iterator id = licenseIDs.begin(); id != licenseIDs.end(); ++id) {
+    ids[i] = (*id).c_str();
+    i++;
+  }
+
+  sp_error error = sp_session_accept_licenses	(getSession(), ids, num);
+  delete ids;
+  if (error != SP_ERROR_OK) {
+    cerr << "Error accepting licenses: " << sp_error_message(error) << endl;
+    return -1;
+  }
+  	 
   return 0;
 }
 
@@ -353,6 +431,10 @@ int SessionWrapper::loadPlaylistTracks(string playlistName, std::list<std::strin
   sp_playlist* playlist = getPlaylistByName(playlistName);
   if (!playlist) return -1;
   
+  return loadPlaylistTracks(playlist, tracks);
+}
+
+int SessionWrapper::loadPlaylistTracks(sp_playlist* playlist, std::list<std::string> &tracks) {  
   int num = sp_playlist_num_tracks(playlist); 	
   for (int n = 0; n < num; n++) {
     sp_track *track = sp_playlist_track(playlist, n);
@@ -433,6 +515,9 @@ sp_error SessionWrapper::create(BaseAudioDriver *driver) {
   sp_error error;
   session = NULL;
   audioDriver = driver;
+    
+  // Init Audio
+  audioDriver->init();
   
   // Default Session Config
   session_config.api_version          = SPOTIFY_API_VERSION;
@@ -447,9 +532,6 @@ sp_error SessionWrapper::create(BaseAudioDriver *driver) {
 
   configureSession(session_config);
   session_config.callbacks            = &session_callbacks;
-  
-  // Init Audio
-  audioDriver->init(this);
   
   // Create Session
   error = sp_session_create(&session_config, &session);
@@ -546,19 +628,28 @@ void SessionWrapper::private_session_mode_changed(sp_session *session, bool is_p
 }
 
 void SessionWrapper::get_audio_buffer_stats(sp_session *session, sp_audio_buffer_stats *stats) {
-  singleton->audioDriver->get_audio_buffer_stats(session, stats);
+  if (singleton->audioDriver) {
+    singleton->audioDriver->get_audio_buffer_stats(session, stats);
+  }
 }
 
 int SessionWrapper::music_delivery(sp_session *session, const sp_audioformat *format, const void *frames, int num_frames) {
-  return singleton->audioDriver->music_delivery(session, format, frames, num_frames);
+  if (singleton->audioDriver) {
+    return singleton->audioDriver->music_delivery(session, format, frames, num_frames);
+  }
+  return 0;
 }
 
 void SessionWrapper::start_playback(sp_session *session) {
-  singleton->audioDriver->start_playback(session);
+  if (singleton->audioDriver) {
+    singleton->audioDriver->start_playback(session);
+  }
 }
 
 void SessionWrapper::stop_playback(sp_session *session) {
-  singleton->audioDriver->stop_playback(session);
+  if (singleton->audioDriver) {
+    singleton->audioDriver->stop_playback(session);
+  }
 }
 
 // Playlist Container

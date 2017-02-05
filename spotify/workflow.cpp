@@ -91,15 +91,22 @@ void Workflow::run() {
   setHadError(false);
   setErrorText("");
   done = false;
+  BaseAudioDriver* audioDriver = SessionWrapper::getSessionWrapper()->getAudioDriver();
   
   do {
     Event event = Event::getNextEvent();
     currentEvent = &event;
     Event::Action action = event.getAction();
-// cout << "Event: " << Event::ActionNames[action] << endl; 
+ // if (action != Event::nothing) cout << "Event: " << Event::ActionNames[action] << endl; 
     
     // Call event handler
     (this->*eventHandlers[action])();
+    
+    // Audio Driver Heartbeat
+    if (action == Event::nothing && audioDriver) {
+      audioDriver->heartBeat();
+    }
+    
   } while ( !done );
 }
 
@@ -140,7 +147,7 @@ void Workflow::message_to_user() {
 void Workflow::notify_main_thread() {
   int timeout = 0;
   do { 
-    sp_session_process_events(SessionWrapper::getSession(), &timeout); 
+    sp_session_process_events(SessionWrapper::getSessionWrapper()->getSession(), &timeout); 
   } while (timeout == 0);
 }
 
@@ -149,7 +156,8 @@ void Workflow::play_token_lost() {
 }
 
 void Workflow::log_message() {
-  cout << "Log: " << getCurrentEvent()->getMessage() << endl;
+  // cout << "Log: " << getCurrentEvent()->getMessage() << endl;
+  // TODO control logging wih a flag 
 }
 
 void Workflow::end_of_track() {

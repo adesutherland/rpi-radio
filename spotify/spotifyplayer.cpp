@@ -2,6 +2,7 @@
 #include <iostream>
 #include <queue> 
 #include <pthread.h>
+#include <stdlib.h>
 
 #include <libspotify/api.h>
 
@@ -13,6 +14,7 @@
 using namespace std;
 
 int main(int argc, char* argv[]) {
+  bool acceptLicenses = false;
   char *user = NULL;
   char *password = NULL;
   
@@ -35,17 +37,18 @@ int main(int argc, char* argv[]) {
       session_config.user_agent           = "RPIRadio";
     }
   } session;
-  
-//  SoundIODriver driver;
-  DummyDriver driver;
-  
-  sp_error error = session.create(&driver);
+
+//  BaseAudioDriver* driver = DummyDriver::SingletonDriverFactory();  
+  BaseAudioDriver* driver = SoundIODriver::SingletonDriverFactory();  
+  sp_error error = session.create(driver);
   if (error != SP_ERROR_OK) {
     cerr << "Error: " << sp_error_message(error) << endl;
+    delete driver;
     exit(-1);
   } 
   cout << "Created session successfully" << endl;  
 
+//  cout << "Waiting" << endl; session.wait(2000);
 
   // Login
   cout << "Logging in ..." << endl;
@@ -55,8 +58,39 @@ int main(int argc, char* argv[]) {
   else {
     rc = session.onlineLogin();
   }
-  if (rc) exit(rc);
+  if (rc) {
+    delete driver;
+    exit(rc);
+  }
   cout << "Logged in" << endl;
+  
+  // License Check
+  cout << "License Check" << endl;
+  list<string> licenseIDs; 
+  list<string> licenseUrls;
+  int ual = session.listUnacceptedLicenses(licenseIDs, licenseUrls);
+  if (ual > 0) {
+    cout << "You need to accept the following licenses (with the -a option):" << endl;
+    for (list<string>::const_iterator l = licenseUrls.begin(); l != licenseUrls.end(); ++l) {
+      cout << "> " << *l << endl;
+    }
+    if (!acceptLicenses) {
+      // Logout  
+      cout << "Logging out ..." << endl;
+      rc = session.logout();
+      delete driver;
+      if (rc) exit(rc);
+      cout << "Logged out" << endl;
+  
+      cout << "Exiting" << endl;
+      return rc;
+    }
+    else {
+      // TODO!
+      cout << "Accepting Licenses is not implemented!" << endl;
+      return -1;
+    }
+  }
 
   {
     // Read Playlists
@@ -68,7 +102,8 @@ int main(int argc, char* argv[]) {
       cout << "> " << *p << endl;
     }
     cout << "Playlists Read" << endl;
-  
+
+/*  
     cout << "Reading Tracks ..." << endl;
     list<string> tracks;
     for (list<string>::const_iterator p = playlists.begin(); p != playlists.end(); ++p) {
@@ -80,50 +115,52 @@ int main(int argc, char* argv[]) {
         cout << "--> " << *t << endl;
       }
     }
-  cout << "Tracks Read" << endl;
+    cout << "Tracks Read" << endl;
+*/ 
   }
   
+  // Play 2 random tracks from the first playlist
   {
     sp_error error;
-    cout << "Play a track ..." << endl;
     list<string> playlists;
     rc = session.loadUsersPlaylists(playlists);
     if (rc) exit(rc);
-    cout << "> Playlist:  " << playlists.front() << endl;
-  
-    list<string> tracks;
-    rc = session.loadPlaylistTracks(playlists.front(), tracks);
-    if (rc) exit(rc);
-    cout << "> Track:  " << tracks.front() << endl;
-    
+    cout << "Play a couple of random tracks from playlist \"" << playlists.front() << "\"" << endl;
+
     sp_playlist* pl = session.getPlaylistByName(playlists.front());
     error = session.loadPlaylist(pl);
     if (error != SP_ERROR_OK) {
       cerr << "Error load playlist: " << sp_error_message(error) << endl;
       exit(-1);
     }
+      
+    list<string> tracks;
+    rc = session.loadPlaylistTracks(pl, tracks);
+    if (rc) exit(rc);
+    for (int i=0; i<2; i++) {
+      int track_num = rand() % tracks.size(); // Randomish
+      sp_track *tk = sp_playlist_track(pl, track_num);
+      error = session.loadTrack(tk);
+      if (error != SP_ERROR_OK) {
+        cerr << "Error load track: " << sp_error_message(error) << endl;
+        exit(-1);
+      }
     
-    sp_track *tk = sp_playlist_track(pl, 0);
-    error = session.loadTrack(tk);
-    if (error != SP_ERROR_OK) {
-      cerr << "Error load track: " << sp_error_message(error) << endl;
-      exit(-1);
+      cout << "> Playing track:  " << sp_track_name(tk) << endl;
+    
+      if (session.playTrack(session.getSession(),tk)) {
+        cerr << "Error playing track" << endl;
+        exit(-1);
+      }
     }
-    
-    cout << "> Track:  " << sp_track_name(tk) << endl;
-    
-    if (session.playTrack(session.getSession(),tk)) {
-      cerr << "Error playing track" << endl;
-      exit(-1);
-    }
-
-    cout << "Track Played" << endl;
+    cout << "Tracks Played" << endl;
   }
   
   
   // Logout  
   cout << "Logging out ..." << endl;
   rc = session.logout();
+  delete driver;
   if (rc) exit(rc);
   cout << "Logged out" << endl;
   
