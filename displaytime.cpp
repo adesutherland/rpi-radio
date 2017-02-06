@@ -34,6 +34,8 @@
 
 #include <getopt.h>
 
+#include "rpi-radio.h"
+
 // Display type 3 = Adafruit I2C 128x64
 #define MYOLED 3
 
@@ -73,6 +75,8 @@ void handleRotary(char* buffer) {
 		     else {
                // play the media_player
                libvlc_media_player_play(mp);
+               // Set Volume
+               libvlc_audio_set_volume(mp, 100);
                playing = true;
 		     }
 			break;
@@ -83,22 +87,25 @@ void handleRotary(char* buffer) {
 
 		  case '>':
 //			printf(">\n");
-			if (playing) {
-				int volume = libvlc_audio_get_volume(mp);	
-				volume += 5;
-				if (volume > 100) volume = 100;
-				libvlc_audio_set_volume(mp, volume);
-			}
-			break;
+        VolumeControl::increaseVolume();
+
+//			if (playing) {
+//				int volume = libvlc_audio_get_volume(mp);	
+//				volume += 5;
+//				if (volume > 100) volume = 100;
+//				libvlc_audio_set_volume(mp, volume);
+//			}
+        break;
 			
 		  case '<':
 //			printf("<\n");
-			if (playing) {
-				int volume = libvlc_audio_get_volume(mp);	
-				volume -= 5;
-				if (volume < 0) volume = 0;
-				libvlc_audio_set_volume(mp, volume);
-			}
+        VolumeControl::decreaseVolume();
+//			if (playing) {
+//				int volume = libvlc_audio_get_volume(mp);	
+//				volume -= 5;
+//				if (volume < 0) volume = 0;
+//				libvlc_audio_set_volume(mp, volume);
+//			}
 			break;
 
 		  default:
@@ -365,6 +372,9 @@ int main(int argc, char **argv)
 //	printf("preamp=%f\n", eqPreamp);
 	libvlc_media_player_set_equalizer(mp, eq);
 	libvlc_audio_equalizer_release(eq);
+  
+  // Set Volume
+  libvlc_audio_set_volume(mp, 100);
 
     // Local Display
 	if (display.oled_is_spi_proto(MYOLED))

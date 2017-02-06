@@ -1,4 +1,5 @@
 /* */
+#include <fstream>
 #include <libspotify/api.h>
 #include "spotifywrapper.h"
 
@@ -97,7 +98,7 @@ void Workflow::run() {
     Event event = Event::getNextEvent();
     currentEvent = &event;
     Event::Action action = event.getAction();
- // if (action != Event::nothing) cout << "Event: " << Event::ActionNames[action] << endl; 
+// if (action != Event::nothing) cout << "Event: " << Event::ActionNames[action] << endl; 
     
     // Call event handler
     (this->*eventHandlers[action])();
@@ -156,8 +157,10 @@ void Workflow::play_token_lost() {
 }
 
 void Workflow::log_message() {
-  // cout << "Log: " << getCurrentEvent()->getMessage() << endl;
-  // TODO control logging wih a flag 
+  // TODO - Proper logging framework please!  
+  std::ofstream logfile;
+  logfile.open("spotifyplayer.log", std::ios_base::app);
+  logfile << getCurrentEvent()->getMessage(); // << endl; // Seems to have a endl anyway
 }
 
 void Workflow::end_of_track() {

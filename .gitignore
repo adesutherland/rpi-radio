@@ -38,3 +38,6 @@ appkey.c
 
 # Temp files
 *~
+
+# Log files
+*.log

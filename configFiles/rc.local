@@ -6,8 +6,15 @@
 # Make sure that the script will "exit 0" on success or any other
 # value on error.
 #
+exec 2> /var/log/rc.local.log  # send stderr from rc.local to a log file
+exec 1>&2                      # send stdout to the same log file
+#set -x                         # tell sh to display commands before execution
 
-# Print the IP address
+
+
+
+# Print data and IP address
+date
 _IP=$(hostname -I) || true
 if [ "$_IP" ]; then
   printf "My IP address is %s\n" "$_IP"
@@ -15,10 +22,13 @@ fi
 
 
 # Start pulseaudio as system (make sure you have "adduser root pulse-access")
+sleep 10
+echo Start Pulseaudio
 /usr/bin/pulseaudio --system &
-sleep 2
+sleep 10
 
-# start clock radio
+# start rpi-radio
+echo Start RPI Radio
 /usr/local/bin/displaytime &
 
 exit 0

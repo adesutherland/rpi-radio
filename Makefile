@@ -1,21 +1,34 @@
-# Makefile
-CCFLAGS = -Ofast -mfpu=vfp -mfloat-abi=hard -march=armv6zk -mtune=arm1176jzf-s -Wall  -lvlc -lwiringPi -lpthread -lArduiPi_OLED
+# RPI Radio
+TARGET = displaytime
+OBJS += displaytime.o volume.o
+PAMIXEROBJS += pamixer/pulseaudio.o pamixer/device.o pamixer/callbacks.o
 
-PROGRAMS = displaytime
-SOURCES = ${PROGRAMS:=.cpp}
+CFLAGS += -Ofast -mfpu=vfp -mfloat-abi=hard -march=armv6zk -mtune=arm1176jzf-s -Wall 
 
-all: ${PROGRAMS}
+CXXFLAGS += -Ofast -mfpu=vfp -mfloat-abi=hard -march=armv6zk -mtune=arm1176jzf-s -Wall 
 
-${PROGRAMS}: ${SOURCES}
-	g++ ${CCFLAGS} $@.cpp -o $@
+LDFLAGS +=
+
+LDLIBS += -lvlc -lwiringPi -lpthread -lArduiPi_OLED
+LDLIBS += -lpulse -lboost_program_options
+
+all:	pamixer-project $(TARGET)
+
+pamixer-project:
+	make -C pamixer
+
+displaytime.o: displaytime.cpp rpi-radio.h	
+
+volume.o: volume.cpp rpi-radio.h
+
+$(TARGET):	$(OBJS)
+	$(CXX) $(CFLAGS) $(LDFLAGS) $^ $(PAMIXEROBJS) $(LDLIBS) -o $@
+	
+clean:
+	make -C pamixer clean
+	rm -f *.o *~ $(TARGET)
 
 INSTALL:
-	-sudo killall displaytime
-	sudo cp displaytime /usr/local/bin
-	sudo /usr/local/bin/displaytime &	
-
-clean:
-	rm -rf $(PROGRAMS)
-
-
-
+	-sudo killall $(TARGET)
+	sudo cp $(TARGET) /usr/local/bin
+	sudo /usr/local/bin/$(TARGET) &	
