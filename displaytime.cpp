@@ -1,64 +1,23 @@
 /*
- * Displays the time on a Monochrome OLEDs based on SSD1306 driver
- * Used the adafruit provided library
+ * Main RPI Radio Program
  */
-
-#include <fstream>
-#include <iostream>
-
-#include <stdio.h>
-#include <time.h>
-#include <math.h>
 #include <unistd.h>
-#include <string.h>
 #include <stdlib.h>
-#include <fcntl.h>
 #include <termios.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
-#include <sys/select.h>
-#include <string.h>
-#include <errno.h>
-#include <wiringPi.h>
-#include <pthread.h>
-#include <sys/time.h>
-#include <sys/socket.h>
 #include <sys/un.h>
-
-#include "ArduiPi_OLED_lib.h"
-#include "Adafruit_GFX.h"
-#include "ArduiPi_OLED.h"
-
 #include <vlc/vlc.h>
-
 #include <getopt.h>
 
 #include "rpi-radio.h"
 
-// Display type 3 = Adafruit I2C 128x64
-#define MYOLED 3
-
 using namespace std;
 
-// Rotary Stuff
-#define BOUNCETIME 2 // 2 ms
-#define BUTTON_PIN 6 // Button - Purple - GPIO25 - physical 4 - wiringpi 6
-#define CLOCK_PIN 4  // Clockwise  - Grey - GPIO23 - physical 1 - wiringpi 4
-#define ANTI_PIN 5   // Anti-clockwise - Yellow - GPIO24 - physical 3 - wiringpi 5
-pthread_mutex_t valuesMutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t debounceConditionMutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t debounceThreadCondition = PTHREAD_COND_INITIALIZER;
-pthread_t debounceThread;
-int rotarySocket[2]; //FDs
-int buttonValue = HIGH;
-int clockValue = HIGH;
-int antiValue = HIGH;
-
-ArduiPi_OLED display;
+AbstractDisplay *display;
 libvlc_instance_t *inst;
 libvlc_media_player_t *mp;
 libvlc_media_t *m;
+int rotarySocket;
 
 void handleRotary(char* buffer) {
   static bool playing = false;
@@ -67,46 +26,33 @@ void handleRotary(char* buffer) {
 	  switch (buffer[i]) {
 		  case '.':
 //			printf(".\n");
-			if (playing) {
+        if (playing) {
                // stop playing
                libvlc_media_player_stop(mp);
                playing = false;
-		     }
-		     else {
+        }
+        else {
                // play the media_player
                libvlc_media_player_play(mp);
                // Set Volume
                libvlc_audio_set_volume(mp, 100);
                playing = true;
-		     }
-			break;
+        }
+        break;
 
 		  case '^':
 //			printf("^\n");
-			break;
+        break;
 
 		  case '>':
 //			printf(">\n");
         VolumeControl::increaseVolume();
-
-//			if (playing) {
-//				int volume = libvlc_audio_get_volume(mp);	
-//				volume += 5;
-//				if (volume > 100) volume = 100;
-//				libvlc_audio_set_volume(mp, volume);
-//			}
         break;
 			
 		  case '<':
 //			printf("<\n");
         VolumeControl::decreaseVolume();
-//			if (playing) {
-//				int volume = libvlc_audio_get_volume(mp);	
-//				volume -= 5;
-//				if (volume < 0) volume = 0;
-//				libvlc_audio_set_volume(mp, volume);
-//			}
-			break;
+        break;
 
 		  default:
 		    ;
@@ -124,7 +70,7 @@ int readResponse(int filedesc, int secs)
 
   FD_ZERO(&set); /* clear the set */
   FD_SET(filedesc, &set); /* add file descriptor to the set - slave device */
-  FD_SET(rotarySocket[0], &set); /* add file descriptor of our local rotary device */
+  FD_SET(rotarySocket, &set); /* add file descriptor of our local rotary device */
 
   timeout.tv_sec = secs;
   timeout.tv_usec = 0;
@@ -146,8 +92,8 @@ int readResponse(int filedesc, int secs)
     handleRotary(buff);
   }
 
-  if (FD_ISSET(rotarySocket[0], &set)) { // Rotary events available
-    rc = read( rotarySocket[0], buff, len ); 
+  if (FD_ISSET(rotarySocket, &set)) { // Rotary events available
+    rc = read( rotarySocket, buff, len ); 
     buff[rc] = 0;
 //    printf("master response: [%s]\n", buff);
     handleRotary(buff);
@@ -209,97 +155,6 @@ int connect(const char* device) {
 
    sendCommand(tty_fd, "Q");
    return tty_fd;
-}
-
-void ButtonInterrupt() {
-  // Record Value (using mutex's of course)	
-  pthread_mutex_lock(&valuesMutex);
-  buttonValue = digitalRead(BUTTON_PIN);
-  pthread_mutex_unlock(&valuesMutex);
-  
-  // Kick the debounce thread
-  pthread_mutex_lock(&debounceConditionMutex);
-  pthread_cond_signal(&debounceThreadCondition);
-  pthread_mutex_unlock(&debounceConditionMutex);
-}
-
-void ClockInterrupt() {
-  // Record Value (using mutex's of course)	
-  pthread_mutex_lock(&valuesMutex);
-  clockValue = digitalRead(CLOCK_PIN);
-  pthread_mutex_unlock(&valuesMutex);
-  
-  // Kick the debounce thread
-  pthread_mutex_lock(&debounceConditionMutex);
-  pthread_cond_signal(&debounceThreadCondition);
-  pthread_mutex_unlock(&debounceConditionMutex);
-}
-
-void AntiInterrupt() {
-  // Record Value (using mutex's of course)	
-  pthread_mutex_lock(&valuesMutex);
-  antiValue = digitalRead(ANTI_PIN);
-  pthread_mutex_unlock(&valuesMutex);
-  
-  // Kick the debounce thread
-  pthread_mutex_lock(&debounceConditionMutex);
-  pthread_cond_signal(&debounceThreadCondition);
-  pthread_mutex_unlock(&debounceConditionMutex);
-}
-
-void *readAndDebounceRotor(void*) {
-  bool timedOut = true;
-  int lastButtonValue = HIGH;
-  int lastClockValue = HIGH;
-  int lastAntiValue = HIGH;
-
-  pthread_mutex_lock(&debounceConditionMutex);
-  while (true) {
-    if (timedOut) { // Before we timed out so are not waiting for debounce noise 
-      pthread_cond_wait(&debounceThreadCondition, &debounceConditionMutex); 
-      timedOut = false; // We must have got a signal
-    }
-    else { // We got a value change - need to wait a bit to see if it is just noise
-  	  struct timespec timeToWait;
-      struct timeval now;
-      gettimeofday(&now,NULL);
-      timeToWait.tv_sec = now.tv_sec;
-      timeToWait.tv_nsec = 1000UL * (now.tv_usec+BOUNCETIME); // tv_nsec is nano, tv_usec is micro {sigh}!	  
-      int rc = pthread_cond_timedwait(&debounceThreadCondition, &debounceConditionMutex, &timeToWait);
-      if (rc == ETIMEDOUT) timedOut = true;
-      else timedOut = false;
-    }
-
-
-    if (timedOut) {
-      pthread_mutex_lock(&valuesMutex); // I don't THINK this will cause a deadlock!
-
-	  // OK things have settled down - whats changed?
-      if (lastButtonValue != buttonValue) {
-		  lastButtonValue = buttonValue;
-		  if (lastButtonValue == HIGH) write(rotarySocket[1], "^", 1); 
-		  else write(rotarySocket[1], ".", 1);
-      }
-
-      if (lastAntiValue != antiValue) {
-		  lastAntiValue = antiValue;
-      }
-
-      if (lastClockValue != clockValue) {
-		  lastClockValue = clockValue;
-		  if (lastClockValue == LOW) {
-		    if (lastAntiValue == LOW) write(rotarySocket[1], ">", 1);
-		    else write(rotarySocket[1], "<", 1);
-		  }
-      }
-
-      pthread_mutex_unlock( &valuesMutex );
-    }
-  }
-  
-  // Wont get here - but anyway!
-  pthread_mutex_unlock( &debounceConditionMutex );
-  return 0;
 }
 
 int main(int argc, char **argv)
@@ -376,145 +231,70 @@ int main(int argc, char **argv)
   // Set Volume
   libvlc_audio_set_volume(mp, 100);
 
-    // Local Display
-	if (display.oled_is_spi_proto(MYOLED))
-	{
-		// SPI parameters
-		if ( !display.init(OLED_SPI_DC,OLED_SPI_RESET,OLED_SPI_CS, MYOLED) )
-			exit(EXIT_FAILURE);
-	}
-	else
-	{
-		// I2C parameters
-		if ( !display.init(OLED_I2C_RESET,MYOLED) )
+  // Local Display
+  display = LocalDisplay::Factory();
+  if (display->initiate()) {
 			exit(EXIT_FAILURE);
 	}
 
-	display.begin();
+  // Setup the local rotary control
+  AbstractRotaryControl* localRotary = LocalRotaryControl::Factory();
+  rotarySocket = localRotary->connect();
+  if (rotarySocket < 0) {
+    return 1;
+  }
+  
+  // Connect go the slave
+  int tty_fd = connect("/dev/ttyACM0");
 
-    // Setup the local rotary control
-
-    // sets up the wiringPi library
-    if (wiringPiSetup () < 0) {
-       fprintf (stderr, "Unable to setup wiringPi: %s\n", strerror (errno));
-       return 1;
-    }
-
-    // set pins to generate an interrupt
-    pinMode(BUTTON_PIN, INPUT);
-    pullUpDnControl(BUTTON_PIN, PUD_UP);
-    if ( wiringPiISR (BUTTON_PIN, INT_EDGE_BOTH, &ButtonInterrupt) < 0 ) {
-       fprintf (stderr, "Unable to setup Button ISR: %s\n", strerror (errno));
-       return 1;
-    }
- 
-    pinMode(CLOCK_PIN, INPUT);
-    pullUpDnControl(CLOCK_PIN, PUD_UP);
-    if ( wiringPiISR (CLOCK_PIN, INT_EDGE_BOTH, &ClockInterrupt) < 0 ) {
-       fprintf (stderr, "Unable to setup Clockwise ISR: %s\n", strerror (errno));
-       return 1;
-    }
- 
-    pinMode(ANTI_PIN, INPUT);
-    pullUpDnControl(ANTI_PIN, PUD_UP);
-    if ( wiringPiISR (ANTI_PIN, INT_EDGE_BOTH, &AntiInterrupt) < 0 ) {
-       fprintf (stderr, "Unable to setup Anticlockwise ISR: %s\n", strerror (errno));
-       return 1;
-    }
-    
-    // We need a socket to communicate to our thread
-    socketpair(PF_LOCAL, SOCK_STREAM, 0, rotarySocket);
-
-    // Thread to read and debounce the rotary control
-    pthread_create( &debounceThread, NULL, &readAndDebounceRotor, NULL);
-
-    // Connect go the slave
-    int tty_fd = connect("/dev/ttyACM0");
-
-    // Loop to display local time every minute
-    int respRC = 0;
-    while (true) {
-      time ( &rawtime );
-      timeinfo = localtime ( &rawtime );
-      sprintf(timeText, "%02d:%02d", timeinfo->tm_hour, timeinfo->tm_min);
+  // Loop to display local time every minute
+  int respRC = 0;
+  while (true) {
+    time ( &rawtime );
+    timeinfo = localtime ( &rawtime );
+    sprintf(timeText, "%02d:%02d", timeinfo->tm_hour, timeinfo->tm_min);
 
 	  if (respRC == 0 || (60-timeinfo->tm_sec == 0)) { // respRC==0 means readResponse() timed out so the minute is up and we need to update the clock	
-	    display.clearDisplay();
-	    display.setRotation(2); 
-        display.setTextColor(WHITE);
          
-        if ( (timeinfo->tm_hour >= 7 && timeinfo->tm_hour < 20) ) {
-		  // Daytime 
-		  display.setBrightness(0x80);
-          display.setTextSize(4);  
-          display.setCursor(5,18);
-          display.print(timeText);
-
-          sendDayTime(tty_fd, timeText);        
+      if ( (timeinfo->tm_hour >= 7 && timeinfo->tm_hour < 20) ) {
+        // Daytime
+        display->setMode(AbstractDisplay::DayClock); 
+        sendDayTime(tty_fd, timeText);        
 	    }
         
-        else if ( (timeinfo->tm_hour >= 6 && timeinfo->tm_hour < 7) ) {
-		  // Dawn
-		  display.setBrightness(0);
-          display.setTextSize(2);  
-          display.setCursor(35,50);
-          display.print(timeText);
-
-          sendNightTime(tty_fd, timeText);
-        }
+      else if ( (timeinfo->tm_hour >= 6 && timeinfo->tm_hour < 7) ) {
+        // Dawn
+        display->setMode(AbstractDisplay::DuskClock);
+        sendNightTime(tty_fd, timeText);
+      }
          
-        else if ( (timeinfo->tm_hour >= 20 && timeinfo->tm_hour < 22) ) {
-		  // Dusk
-		  display.setBrightness(0);
-          display.setTextSize(2);  
-          display.setCursor(35,50);
-          display.print(timeText);
-
-          sendNightTime(tty_fd, timeText);
-        }
+      else if ( (timeinfo->tm_hour >= 20 && timeinfo->tm_hour < 22) ) {
+        // Dusk
+        display->setMode(AbstractDisplay::DuskClock);
+        sendNightTime(tty_fd, timeText);
+      }
          
-         else {
-		   // Night 
-          #define CLOCK_X 65
-          #define CLOCK_Y 56
-          #define CLOCK_HRAD 7
-          float angle;
-          int x;
-          int y;
-               
-          // display hour hand
-          angle = (timeinfo->tm_hour * 30) + (timeinfo->tm_min / 2);
-          angle = angle / 57.296; // radians  
-          x = sin(angle)*CLOCK_HRAD;
-          y = cos(angle)*CLOCK_HRAD;
-
-          display.setBrightness(0);
-          display.drawLine(CLOCK_X - x, CLOCK_Y + y, CLOCK_X + x, CLOCK_Y - y, WHITE);			
-
-//          sendHourHand(tty_fd, timeText);
-          sendDark(tty_fd);          
+      else {
+        // Night 
+        display->setMode(AbstractDisplay::NightClock);
+//        sendHourHand(tty_fd, timeText);
+        sendDark(tty_fd);          
 	    }
-
-        display.display();
+      display->setClock(timeinfo->tm_hour, timeinfo->tm_min);
 	  } 
      
-      // sleep until the next minute starts (i.e. likely after 60 seconds)
-      respRC = readResponse(tty_fd, 60-timeinfo->tm_sec); // Also processes and rotary events
+    // sleep until the next minute starts (i.e. likely after 60 seconds)
+    respRC = readResponse(tty_fd, 60-timeinfo->tm_sec); // Also processes and rotary events
 	}
 	
 	// Never get here - but anyway - (todo - could catch a signal)
-    display.close();
-    close(tty_fd);
+  delete display;
+  close(tty_fd);
     
-    // free the media_player
-    libvlc_media_player_release(mp);
-    libvlc_release(inst);
+  // free the media_player
+  libvlc_media_player_release(mp);
+  libvlc_release(inst);
   
-    // Wait for the rotary thread to end
-    pthread_join(debounceThread, NULL);
-    close(rotarySocket[0]);
-    close(rotarySocket[1]);
+  // Kill the Rotary Controller
+  delete localRotary;
 }
-
-
-
