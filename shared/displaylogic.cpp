@@ -1,19 +1,11 @@
-/*
- * Displays on a Monochrome OLEDs based on SSD1306 driver
- * Used the adafruit provided library
- */
+/* RPI / Arduino Shared Display Logic */
 
-#include "rpi-radio.h"
+#ifdef RPI
+#include "displaylogic.h"
+#endif
 
 #include <stdio.h>
 #include <math.h>
-
-#include "ArduiPi_OLED_lib.h"
-#include "Adafruit_GFX.h"
-#include "ArduiPi_OLED.h"
-
-// Display type 3 = Adafruit I2C 128x64
-#define MYOLED 3
 
 using namespace std;
 
@@ -26,6 +18,7 @@ class LocalDisplayPrivate: public AbstractDisplay {
     }
       
     int initiate() {
+#ifdef RPI
       if (display.oled_is_spi_proto(MYOLED))
       {
         // SPI parameters
@@ -39,7 +32,15 @@ class LocalDisplayPrivate: public AbstractDisplay {
         return -1;
       }
       display.begin();
+      display.clearDisplay();
+      display.display();
       return 0;
+#else
+      display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  
+      display.clearDisplay();
+      display.display();
+      return 0;
+#endif
     }
     
     void setMode(Mode mode) {
@@ -52,6 +53,7 @@ class LocalDisplayPrivate: public AbstractDisplay {
     
     void setClock(int hour, int min) {
       if ( (displayHour == hour) && (displayMin == min) ) return; // No change
+      
       displayHour = hour;
       displayMin = min;
       
@@ -59,19 +61,17 @@ class LocalDisplayPrivate: public AbstractDisplay {
       snprintf(displayTime, 6, "%02d:%02d", displayHour, displayMin);
             
       display.clearDisplay();
-	    display.setRotation(2); 
+      display.setRotation(2); 
       display.setTextColor(WHITE);
 
       switch (displayMode) {
-        case DayClock:         
-          display.setBrightness(0x80);
+        case DayClock:        
           display.setTextSize(4);  
           display.setCursor(5,18);
           display.print(displayTime);
           break;
           
         case DuskClock:
-          display.setBrightness(0);
           display.setTextSize(2);  
           display.setCursor(35,50);
           display.print(displayTime);
@@ -92,7 +92,6 @@ class LocalDisplayPrivate: public AbstractDisplay {
             x = sin(angle)*CLOCK_HRAD;
             y = cos(angle)*CLOCK_HRAD;
 
-            display.setBrightness(0);
             display.drawLine(CLOCK_X - x, CLOCK_Y + y, CLOCK_X + x, CLOCK_Y - y, WHITE);          
           }
           break;
@@ -104,17 +103,28 @@ class LocalDisplayPrivate: public AbstractDisplay {
     }
 
     ~LocalDisplayPrivate() {
+#ifdef RPI
       display.close();
+#endif
     }
     
   private:
     static LocalDisplayPrivate* singleton;
+#ifdef RPI
     ArduiPi_OLED display;
+#else
+    Adafruit_SSD1306 display;
+#endif
     Mode displayMode;    
     int displayHour;
     int displayMin;
 
-    LocalDisplayPrivate() {
+    LocalDisplayPrivate() 
+#ifndef RPI
+    : display(OLED_TYPE)
+#endif
+    
+    {
       displayMode = DayClock;
       displayHour = -1;
       displayMin = -1;
@@ -122,6 +132,7 @@ class LocalDisplayPrivate: public AbstractDisplay {
 };
 
 LocalDisplayPrivate* LocalDisplayPrivate::singleton = NULL;
+
 
 AbstractDisplay* LocalDisplay::Factory() {
   return LocalDisplayPrivate::Factory();

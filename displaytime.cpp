@@ -10,10 +10,13 @@
 #include <getopt.h>
 
 #include "rpi-radio.h"
+#include "shared/displaylogic.h"
 
 using namespace std;
 
 AbstractDisplay *display;
+AbstractDisplay *remoteDisplay;
+
 libvlc_instance_t *inst;
 libvlc_media_player_t *mp;
 libvlc_media_t *m;

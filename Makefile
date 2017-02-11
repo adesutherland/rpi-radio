@@ -1,32 +1,40 @@
 # RPI Radio
 TARGET = displaytime
-OBJS += displaytime.o volume.o rotarycontrol.o display.o
+OBJS += displaytime.o volume.o rotarycontrol.o shared/displaylogic.o remote.o
 PAMIXEROBJS += pamixer/pulseaudio.o pamixer/device.o pamixer/callbacks.o
 
 CFLAGS += -Ofast -mfpu=vfp -mfloat-abi=hard -march=armv6zk -mtune=arm1176jzf-s -Wall 
-
 CXXFLAGS += -Ofast -mfpu=vfp -mfloat-abi=hard -march=armv6zk -mtune=arm1176jzf-s -Wall 
+
+CFLAGS += -DRPI
+CXXFLAGS += -DRPI 
 
 LDFLAGS +=
 
 LDLIBS += -lvlc -lwiringPi -lpthread -lArduiPi_OLED
 LDLIBS += -lpulse -lboost_program_options
 
-all:	pamixer-project $(TARGET)
+all:	pamixer-project $(TARGET) arduino
 
 pamixer-project:
 	make -C pamixer
 
-displaytime.o: displaytime.cpp rpi-radio.h	
+displaytime.o: displaytime.cpp rpi-radio.h shared/displaylogic.h
 
-rotarycontrol.o: rotarycontrol.cpp rpi-radio.h	
+rotarycontrol.o: rotarycontrol.cpp rpi-radio.h
 
 volume.o: volume.cpp rpi-radio.h
 
-display.o: display.cpp rpi-radio.h
+shared/displaylogic.o: shared/displaylogic.cpp shared/displaylogic.h
+
+remote.o: remote.cpp shared/displaylogic.h rpi-radio.h
 
 $(TARGET):	$(OBJS)
 	$(CXX) $(CFLAGS) $(LDFLAGS) $^ $(PAMIXEROBJS) $(LDLIBS) -o $@
+
+arduino:
+	cp shared/displaylogic.h slave/displaylogic.h
+	cp shared/displaylogic.cpp slave/displaylogic_imp.h
 
 test:
 	-sudo killall $(TARGET)
@@ -39,6 +47,9 @@ stoptesting:
 clean:
 	make -C pamixer clean
 	rm -f *.o *~ $(TARGET)
+	rm -f shared/*.o shared/*~ $(TARGET)
+	rm -f slave/displaylogic.h
+	rm -f slave/displaylogic_imp.h
 
 INSTALL:
 	-sudo killall $(TARGET)
