@@ -5,6 +5,7 @@
 #define RPI_RADIO_H
 
 #include <string>
+#include <map>
 
 class Pulseaudio;
 
@@ -40,6 +41,39 @@ class LocalRotaryControl: public AbstractRotaryControl {
 
   private:
     LocalRotaryControl();
+};
+
+class AbstractModule;
+typedef AbstractModule* (*ModuleFactory)();
+
+class AbstractModule {
+  public:
+    static int initalise();
+    static void shutdown();
+    static int getSize();
+    static int getCurrentIndex();
+    static  AbstractModule* getCurrent();
+    static int setCurrentIndex(int index);
+    static const std::string* getDescriptions();
+    
+
+    virtual ~AbstractModule();
+
+    const std::string moduleName;
+    const std::string moduleDesc;
+    virtual void play() = 0;
+    virtual void stop() = 0;
+  
+  protected:
+    static void addModule(std::string name, ModuleFactory factory);
+    AbstractModule(std::string name, std::string desc);
+    virtual int intialiseModule() = 0;
+    
+  private:
+    static std::map<std::string, ModuleFactory> moduleMap;
+    static int currentIndex;
+    static ModuleFactory currentModule;
+
 };
 
 #endif
