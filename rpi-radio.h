@@ -42,12 +42,4 @@ class LocalRotaryControl: public AbstractRotaryControl {
     LocalRotaryControl();
 };
 
-class RemoteRotaryControl: public AbstractRotaryControl {
-  public:
-    static AbstractRotaryControl* Factory();
-
-  private:
-    RemoteRotaryControl();
-};
-
 #endif

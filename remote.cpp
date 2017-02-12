@@ -1,24 +1,31 @@
 /* Remote Display */
 
+#include <termios.h>
+#include <fcntl.h>
+
 #include "rpi-radio.h"
 #include "shared/displaylogic.h"
-
+#include "remote.h"
 
 #include <stdio.h>
 #include <math.h>
 
 using namespace std;
 
-class RemoteDisplayPrivate: public AbstractDisplay {
+class RemoteControlPrivate: public RemoteControl {
   public:
   
-    static AbstractDisplay* Factory() {
-      if (!singleton) singleton = new RemoteDisplayPrivate;
+    static RemoteControl* Factory() {
+      if (!singleton) singleton = new RemoteControlPrivate;
       return singleton;
     }
       
     int initiate() {
       return 0;
+    }
+ 
+    int connect() {
+      return filedesc;
     }
     
     void setMode(Mode mode) {
@@ -27,7 +34,11 @@ class RemoteDisplayPrivate: public AbstractDisplay {
         displayHour = -1; // Force a display reset
         displayMin = -1;
       }
-      // TODO Remote
+      
+      int modeID = static_cast<int>(mode);
+      char detail[6];
+      snprintf(detail, 6, "%d", modeID);
+      sendCommand("M", detail);
     }
     
     void setClock(int hour, int min) {
@@ -36,71 +47,67 @@ class RemoteDisplayPrivate: public AbstractDisplay {
       displayHour = hour;
       displayMin = min;
       
-      char displayTime[6];
-      snprintf(displayTime, 6, "%02d:%02d", displayHour, displayMin);
-
-      // TODO Remote            
-
+      char detail[6];
+      snprintf(detail, 6, "%02d:%02d", displayHour, displayMin);
+      sendCommand("C", detail);
     }
 
-    ~RemoteDisplayPrivate() {
-
+    ~RemoteControlPrivate() {
+      close(filedesc);
     }
     
   private:
-    static RemoteDisplayPrivate* singleton;
+    static RemoteControlPrivate* singleton;
 
     Mode displayMode;    
     int displayHour;
     int displayMin;
+    int filedesc;
 
-    RemoteDisplayPrivate()     
+    RemoteControlPrivate()     
     {
       displayMode = DayClock;
       displayHour = -1;
       displayMin = -1;
-    }
-};
+      
+      struct termios tio;
 
-RemoteDisplayPrivate* RemoteDisplayPrivate::singleton = NULL;
+      memset(&tio,0,sizeof(tio));
+      tio.c_iflag=0;
+      tio.c_oflag=0;
+      tio.c_cflag=CS8|CREAD|CLOCAL;
+      tio.c_lflag=0;
+      tio.c_cc[VMIN]=1;
+      tio.c_cc[VTIME]=5;
+        
+      filedesc=open("/dev/ttyACM0", O_RDWR | O_NONBLOCK);      
+      cfsetospeed(&tio,B19200);
+      cfsetispeed(&tio,B19200);
 
+      tcsetattr(filedesc,TCSANOW,&tio);
 
-AbstractDisplay* RemoteDisplay::Factory() {
-  return RemoteDisplayPrivate::Factory();
-}
-
-
-
-
-
-
-
-class RemoteRotaryControlPrivate: public AbstractRotaryControl {
-  public:
-
-    static AbstractRotaryControl* Factory() {
-      if (!singleton) singleton = new RemoteRotaryControlPrivate;
-      return singleton;
-    }
-
-    ~RemoteRotaryControlPrivate() {
+      sendCommand("Q");
+      sendCommand("Q");
+      sendCommand("Q");
     }
     
-    int connect() {
-
-
-      return -1;
+    void sendCommand(const char* command, const char* detail) {
+      write(filedesc, command, 1);
+      if (detail) {
+        write(filedesc, detail, strlen(detail));
+      }
+      write(filedesc, "\n", 1);
     }
-
-  private:
-    static RemoteRotaryControlPrivate* singleton;
-
-    RemoteRotaryControlPrivate() {
+    
+    void sendCommand(const char* command) {
+      write(filedesc, command, 1);
+      write(filedesc, "\n", 1);
     }
+    
 };
 
-RemoteRotaryControlPrivate* RemoteRotaryControlPrivate::singleton = NULL;
+RemoteControlPrivate* RemoteControlPrivate::singleton = NULL;
 
-AbstractRotaryControl* RemoteRotaryControl::Factory() {
-  return RemoteRotaryControlPrivate::Factory();
+RemoteControl* RemoteControl::Factory() {
+  return RemoteControlPrivate::Factory();
 }

@@ -89,6 +89,7 @@ void loop() {
         
         case 'Q': // If the board was still running the bootloader Q would exit and load [this] program
                   // So this is just to make a friendly response - as I am already running
+          slavedisplay->setMode(AbstractDisplay::DayClock); // Master must be restarting 
         case 0:   // Empty commands - likely syncing when booting         
           Serial.println("K");
           break;

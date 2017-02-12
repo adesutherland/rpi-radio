@@ -1,26 +1,22 @@
 /*
  * Main RPI Radio Program
  */
-#include <unistd.h>
-#include <stdlib.h>
-#include <termios.h>
-#include <fcntl.h>
-#include <sys/un.h>
 #include <vlc/vlc.h>
-#include <getopt.h>
 
 #include "rpi-radio.h"
 #include "shared/displaylogic.h"
+#include "remote.h"
 
 using namespace std;
 
 AbstractDisplay *display;
-AbstractDisplay *remoteDisplay;
+RemoteControl *remote;
 
 libvlc_instance_t *inst;
 libvlc_media_player_t *mp;
 libvlc_media_t *m;
 int rotarySocket;
+int remoteSocket;
 
 void handleRotary(char* buffer) {
   static bool playing = false;
@@ -63,7 +59,7 @@ void handleRotary(char* buffer) {
   }
 }
 
-int readResponse(int filedesc, int secs)
+int readResponse(int secs)
 {
   fd_set set;
   struct timeval timeout;
@@ -72,13 +68,16 @@ int readResponse(int filedesc, int secs)
   int len = 100;
 
   FD_ZERO(&set); /* clear the set */
-  FD_SET(filedesc, &set); /* add file descriptor to the set - slave device */
+  FD_SET(remoteSocket, &set); /* add file descriptor to the set - slave device */
   FD_SET(rotarySocket, &set); /* add file descriptor of our local rotary device */
 
   timeout.tv_sec = secs;
   timeout.tv_usec = 0;
+  
+  int maxFD = remoteSocket;
+  if (rotarySocket > maxFD) maxFD = rotarySocket;
 
-  rc = select(filedesc + 1, &set, NULL, NULL, &timeout);
+  rc = select(maxFD + 1, &set, NULL, NULL, &timeout);
   if (rc == -1) {
     perror("select\n"); /* an error accured */
     return -1;
@@ -88,8 +87,8 @@ int readResponse(int filedesc, int secs)
     return 0;
   }
   
-  if (FD_ISSET(filedesc, &set)) { // Slave Response available
-    rc = read( filedesc, buff, len ); 
+  if (FD_ISSET(remoteSocket, &set)) { // Slave Response available
+    rc = read( remoteSocket, buff, len ); 
     buff[rc] = 0;
 //    printf("slave response: [%s]\n", buff);
     handleRotary(buff);
@@ -103,61 +102,6 @@ int readResponse(int filedesc, int secs)
   }
 
   return 1;
-}
-
-int sendCommand(int filedesc, const char* command) {
-   write(filedesc, command, strlen(command));
-   write(filedesc, "\n", 1);
-   return readResponse(filedesc, 3);
-}
-
-int sendDayTime(int filedesc, const char* command) {
-   write(filedesc, "C", 1);
-   write(filedesc, command, strlen(command));
-   write(filedesc, "\n", 1);
-   return readResponse(filedesc, 3);
-}
-
-int sendNightTime(int filedesc, const char* command) {
-   write(filedesc, "N", 1);
-   write(filedesc, command, strlen(command));
-   write(filedesc, "\n", 1);
-   return readResponse(filedesc, 3);
-}
-
-int sendHourHand(int filedesc, const char* command) {
-   write(filedesc, "H", 1);
-   write(filedesc, command, strlen(command));
-   write(filedesc, "\n", 1);
-   return readResponse(filedesc, 3);
-}
-
-int sendDark(int filedesc) {
-   write(filedesc, "D", 1);
-   write(filedesc, "\n", 1);
-   return readResponse(filedesc, 3);
-}
-
-int connect(const char* device) {
-   struct termios tio;
-   int tty_fd;
-
-   memset(&tio,0,sizeof(tio));
-   tio.c_iflag=0;
-   tio.c_oflag=0;
-   tio.c_cflag=CS8|CREAD|CLOCAL;
-   tio.c_lflag=0;
-   tio.c_cc[VMIN]=1;
-   tio.c_cc[VTIME]=5;
-        
-   tty_fd=open(device, O_RDWR | O_NONBLOCK);      
-   cfsetospeed(&tio,B19200);
-   cfsetispeed(&tio,B19200);
-
-   tcsetattr(tty_fd,TCSANOW,&tio);
-
-   sendCommand(tty_fd, "Q");
-   return tty_fd;
 }
 
 int main(int argc, char **argv)
@@ -237,7 +181,7 @@ int main(int argc, char **argv)
   // Local Display
   display = LocalDisplay::Factory();
   if (display->initiate()) {
-			exit(EXIT_FAILURE);
+    return 1;
 	}
 
   // Setup the local rotary control
@@ -248,7 +192,14 @@ int main(int argc, char **argv)
   }
   
   // Connect go the slave
-  int tty_fd = connect("/dev/ttyACM0");
+  remote = RemoteControl::Factory();
+  remoteSocket = remote->connect();
+  if (remoteSocket < 0) {
+    return 1;
+  }
+  if (remote->initiate()) {
+    return 1;
+	}
 
   // Loop to display local time every minute
   int respRC = 0;
@@ -262,42 +213,44 @@ int main(int argc, char **argv)
       if ( (timeinfo->tm_hour >= 7 && timeinfo->tm_hour < 20) ) {
         // Daytime
         display->setMode(AbstractDisplay::DayClock); 
-        sendDayTime(tty_fd, timeText);        
+        remote->setMode(AbstractDisplay::DayClock); 
 	    }
         
       else if ( (timeinfo->tm_hour >= 6 && timeinfo->tm_hour < 7) ) {
         // Dawn
         display->setMode(AbstractDisplay::DuskClock);
-        sendNightTime(tty_fd, timeText);
+        remote->setMode(AbstractDisplay::DuskClock);
       }
          
       else if ( (timeinfo->tm_hour >= 20 && timeinfo->tm_hour < 22) ) {
         // Dusk
         display->setMode(AbstractDisplay::DuskClock);
-        sendNightTime(tty_fd, timeText);
+        remote->setMode(AbstractDisplay::DuskClock);
       }
          
       else {
         // Night 
         display->setMode(AbstractDisplay::NightClock);
-//        sendHourHand(tty_fd, timeText);
-        sendDark(tty_fd);          
-	    }
+        remote->setMode(AbstractDisplay::Blank);
+//        remore->setMode(AbstractDisplay::NightClock);
+      }
       display->setClock(timeinfo->tm_hour, timeinfo->tm_min);
+      remote->setClock(timeinfo->tm_hour, timeinfo->tm_min);
 	  } 
      
     // sleep until the next minute starts (i.e. likely after 60 seconds)
-    respRC = readResponse(tty_fd, 60-timeinfo->tm_sec); // Also processes and rotary events
+    respRC = readResponse(60-timeinfo->tm_sec); // Also processes and rotary events
 	}
 	
 	// Never get here - but anyway - (todo - could catch a signal)
-  delete display;
-  close(tty_fd);
-    
+
   // free the media_player
   libvlc_media_player_release(mp);
   libvlc_release(inst);
-  
+
+  delete display;
+  delete remote;
+      
   // Kill the Rotary Controller
   delete localRotary;
 }

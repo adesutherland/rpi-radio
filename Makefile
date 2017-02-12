@@ -19,7 +19,7 @@ all:	pamixer-project $(TARGET) arduino
 pamixer-project:
 	make -C pamixer
 
-displaytime.o: displaytime.cpp rpi-radio.h shared/displaylogic.h
+displaytime.o: displaytime.cpp rpi-radio.h shared/displaylogic.h remote.h
 
 rotarycontrol.o: rotarycontrol.cpp rpi-radio.h
 
@@ -27,7 +27,7 @@ volume.o: volume.cpp rpi-radio.h
 
 shared/displaylogic.o: shared/displaylogic.cpp shared/displaylogic.h
 
-remote.o: remote.cpp shared/displaylogic.h rpi-radio.h
+remote.o: remote.cpp shared/displaylogic.h rpi-radio.h remote.h
 
 $(TARGET):	$(OBJS)
 	$(CXX) $(CFLAGS) $(LDFLAGS) $^ $(PAMIXEROBJS) $(LDLIBS) -o $@
