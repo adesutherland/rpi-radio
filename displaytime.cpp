@@ -4,6 +4,10 @@
  
 #include <iostream>
 
+#include <sys/select.h>
+#include <stdio.h>
+#include <unistd.h>
+
 #include "rpi-radio.h"
 #include "shared/displaylogic.h"
 #include "remote.h"

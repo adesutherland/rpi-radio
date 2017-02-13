@@ -2,24 +2,14 @@
 #ifndef RPI_ARDUINO_DISPLAY_LOGIC_H
 #define RPI_ARDUINO_DISPLAY_LOGIC_H
 
-#ifdef RPI
-
-#include "ArduiPi_OLED_lib.h"
-#include "Adafruit_GFX.h"
-#include "ArduiPi_OLED.h"
-
-// Display type 3 = Adafruit I2C 128x64
-#define MYOLED 3
-
-#endif
-
 class AbstractDisplay {
   public:
     enum Mode { 
       Blank,
       NightClock,
       DuskClock,
-      DayClock
+      DayClock,
+      On
     };
         
     /**

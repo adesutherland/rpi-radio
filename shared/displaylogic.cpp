@@ -2,6 +2,14 @@
 
 #ifdef RPI
 #include "displaylogic.h"
+
+#include "ArduiPi_OLED_lib.h"
+#include "Adafruit_GFX.h"
+#include "ArduiPi_OLED.h"
+
+// Display type 3 = Adafruit I2C 128x64
+#define MYOLED 3
+
 #endif
 
 #include <stdio.h>
@@ -98,6 +106,9 @@ class LocalDisplayPrivate: public AbstractDisplay {
           
         case Blank:
           break;
+          
+        case On:
+          ; // TODO
       }
       display.display();
     }

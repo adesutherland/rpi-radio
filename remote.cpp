@@ -2,6 +2,7 @@
 
 #include <termios.h>
 #include <fcntl.h>
+#include <unistd.h>
 
 #include "rpi-radio.h"
 #include "shared/displaylogic.h"
@@ -9,6 +10,7 @@
 
 #include <stdio.h>
 #include <math.h>
+#include <cstring>
 
 using namespace std;
 
