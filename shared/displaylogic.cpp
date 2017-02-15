@@ -2,6 +2,7 @@
 
 #ifdef RPI
 #include "displaylogic.h"
+#include "../rpi-radio.h"
 
 #include "ArduiPi_OLED_lib.h"
 #include "Adafruit_GFX.h"
@@ -15,6 +16,10 @@
 #include <stdio.h>
 #include <math.h>
 
+#define DISP_LEN 10    // 10 characters
+#define BEGIN_PAUSE 10 // 10 Ticks - 1 second
+#define END_PAUSE 5    // 5 Ticks - 1/2 second
+
 using namespace std;
 
 class LocalDisplayPrivate: public AbstractDisplay {
@@ -23,6 +28,13 @@ class LocalDisplayPrivate: public AbstractDisplay {
     static AbstractDisplay* Factory() {
       if (!singleton) singleton = new LocalDisplayPrivate;
       return singleton;
+    }
+    
+    void heartbeat() {
+      if (statusLen > DISP_LEN || alertLen > DISP_LEN) {
+        ticks++;
+        updateDisplay();
+      }
     }
       
     int initiate() {
@@ -40,30 +52,84 @@ class LocalDisplayPrivate: public AbstractDisplay {
         return -1;
       }
       display.begin();
-      display.clearDisplay();
-      display.display();
-      return 0;
 #else
       display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  
+#endif
       display.clearDisplay();
       display.display();
       return 0;
-#endif
     }
     
     void setMode(Mode mode) {
       if (mode != displayMode) {
         displayMode = mode;
-        displayHour = -1; // Force a display reset
-        displayMin = -1;
+        updateDisplay();
       }
     }
     
     void setClock(int hour, int min) {
-      if ( (displayHour == hour) && (displayMin == min) ) return; // No change
-      
-      displayHour = hour;
-      displayMin = min;
+      if ( (displayHour != hour) || (displayMin != min) ) {
+        displayHour = hour;
+        displayMin = min;
+        updateDisplay();
+      }
+    }
+    
+    void setStatusLine(const char* text) {
+      if ( strcmp(status, text) != 0 ) {
+        strncpy(status, text, MAXCOMMANDLENTH-2);
+        statusLen = strlen(status); 
+        updateDisplay();
+      } 
+    }     
+
+    void setAlertLine(const char* text) {
+      if ( strcmp(alert, text) != 0 ) {
+        strncpy(alert, text, MAXCOMMANDLENTH-2);
+        alertLen = strlen(alert);
+        updateDisplay();
+      } 
+    }
+
+    ~LocalDisplayPrivate() {
+#ifdef RPI
+      display.close();
+#endif
+    }
+    
+  private:
+    static LocalDisplayPrivate* singleton;
+#ifdef RPI
+    ArduiPi_OLED display;
+#else
+    Adafruit_SSD1306 display;
+#endif
+    Mode displayMode;    
+    int displayHour;
+    int displayMin;
+    char status[MAXCOMMANDLENTH];
+    char alert[MAXCOMMANDLENTH];
+    int ticks;
+    int statusLen;
+    int alertLen;
+
+    LocalDisplayPrivate() 
+#ifndef RPI
+    : display(OLED_TYPE)
+#endif
+    
+    {
+      displayMode = DayClock;
+      displayHour = 0;
+      displayMin = 0;
+      status[0] = 0;
+      alert[0] = 0;
+      ticks = 0;
+      statusLen = 0;
+      alertLen = 0;
+    }
+    
+    void updateDisplay() {
       
       char displayTime[6];
       snprintf(displayTime, 6, "%02d:%02d", displayHour, displayMin);
@@ -73,9 +139,9 @@ class LocalDisplayPrivate: public AbstractDisplay {
       display.setTextColor(WHITE);
 
       switch (displayMode) {
-        case DayClock:        
-          display.setTextSize(4);  
-          display.setCursor(5,18);
+        case DayClock:                
+          display.setTextSize(3);  
+          display.setCursor(17,22);
           display.print(displayTime);
           break;
           
@@ -108,42 +174,72 @@ class LocalDisplayPrivate: public AbstractDisplay {
           break;
           
         case On:
-          ; // TODO
+          {
+            // Clock
+            display.setTextSize(3);  
+            display.setCursor(17,0);
+            display.print(displayTime);
+
+            // Status
+            display.setTextSize(2);  
+            display.setCursor(2,28);
+            if (statusLen > DISP_LEN) {
+              // Animate it
+              animate(status, statusLen);
+            }
+            else {
+              // Centre it
+              centre(status, statusLen);
+            }
+
+            // Alert
+            display.setTextSize(2);  
+            display.setCursor(2,50);
+            if (alertLen > DISP_LEN) {
+              // Animate it
+              animate(alert, alertLen);
+            }
+            else {
+              // Centre it
+              centre(alert, alertLen);
+            }
+          }
+          break;
       }
       display.display();
     }
-
-    ~LocalDisplayPrivate() {
-#ifdef RPI
-      display.close();
-#endif
+    
+    void animate(char* text, int len) {
+      int step = ticks % (len - DISP_LEN + BEGIN_PAUSE + END_PAUSE);
+      if (step <= BEGIN_PAUSE) {
+        step = 0;
+        // Draw the first characters 
+      }
+      else if (step > len - DISP_LEN + BEGIN_PAUSE) {
+        // Draw the end characters
+        step = len - DISP_LEN;
+      }
+      else {
+        // Draw tme middle somewhere
+        step -= BEGIN_PAUSE;
+      }
+      for (int i=0; i<DISP_LEN; i++) {
+        display.write(text[ i + step ]);
+      }
     }
     
-  private:
-    static LocalDisplayPrivate* singleton;
-#ifdef RPI
-    ArduiPi_OLED display;
-#else
-    Adafruit_SSD1306 display;
-#endif
-    Mode displayMode;    
-    int displayHour;
-    int displayMin;
-
-    LocalDisplayPrivate() 
-#ifndef RPI
-    : display(OLED_TYPE)
-#endif
-    
-    {
-      displayMode = DayClock;
-      displayHour = -1;
-      displayMin = -1;
+    void centre(char* text, int len) {
+      int pad=(DISP_LEN - len)/2;
+      for (int i=0; i<pad; i++) {
+        display.write(' ');
+      }
+      for (int i=0; text[i]; i++) {
+        display.write(text[i]);
+      }
     }
 };
 
 LocalDisplayPrivate* LocalDisplayPrivate::singleton = NULL;
-
 
 AbstractDisplay* LocalDisplay::Factory() {
   return LocalDisplayPrivate::Factory();

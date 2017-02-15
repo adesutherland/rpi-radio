@@ -1,7 +1,7 @@
 # RPI Radio
 TARGET = displaytime
 OBJS += displaytime.o volume.o rotarycontrol.o shared/displaylogic.o remote.o
-OBJS += abstractmodule.o vlcradio.o
+OBJS += abstractmodule.o vlcradio.o rpidisplay.o controller.o
 PAMIXEROBJS += pamixer/pulseaudio.o pamixer/device.o pamixer/callbacks.o
 
 #CFLAGS += -Ofast -mfpu=vfp -mfloat-abi=hard -march=armv6zk -mtune=arm1176jzf-s 
@@ -9,7 +9,6 @@ PAMIXEROBJS += pamixer/pulseaudio.o pamixer/device.o pamixer/callbacks.o
 
 CFLAGS += -g 
 CXXFLAGS += -g 
-
 
 CFLAGS += -DRPI
 CXXFLAGS += -DRPI 
@@ -30,13 +29,17 @@ pamixer-project:
 
 displaytime.o: displaytime.cpp rpi-radio.h shared/displaylogic.h remote.h
 
+controller.o: controller.cpp rpi-radio.h shared/displaylogic.h
+
 rotarycontrol.o: rotarycontrol.cpp rpi-radio.h
 
 volume.o: volume.cpp rpi-radio.h
 
-shared/displaylogic.o: shared/displaylogic.cpp shared/displaylogic.h
+shared/displaylogic.o: shared/displaylogic.cpp shared/displaylogic.h rpi-radio.h 
 
 remote.o: remote.cpp shared/displaylogic.h rpi-radio.h remote.h
+
+rpidisplay.o: rpidisplay.cpp shared/displaylogic.h
 
 abstractmodule.o: abstractmodule.cpp rpi-radio.h
 

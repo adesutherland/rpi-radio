@@ -3,6 +3,7 @@
 #include <termios.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #include "rpi-radio.h"
 #include "shared/displaylogic.h"
@@ -31,46 +32,78 @@ class RemoteControlPrivate: public RemoteControl {
     }
     
     void setMode(Mode mode) {
-      if (mode != displayMode) {
-        displayMode = mode;
-        displayHour = -1; // Force a display reset
-        displayMin = -1;
-      }
+      pthread_mutex_lock(&mutex);
       
+      // The display mode is always sent - just to ensure displays are synced
+      displayMode = mode;
       int modeID = static_cast<int>(mode);
       char detail[6];
       snprintf(detail, 6, "%d", modeID);
       sendCommand("M", detail);
+      
+      pthread_mutex_unlock(&mutex);
     }
     
     void setClock(int hour, int min) {
-      if ( (displayHour == hour) && (displayMin == min) ) return; // No change
+      pthread_mutex_lock(&mutex);
       
-      displayHour = hour;
-      displayMin = min;
+      if ( (displayHour != hour) || (displayMin != min) ) {
+        displayHour = hour;
+        displayMin = min;
       
-      char detail[6];
-      snprintf(detail, 6, "%02d:%02d", displayHour, displayMin);
-      sendCommand("C", detail);
+        char detail[6];
+        snprintf(detail, 6, "%02d:%02d", displayHour, displayMin);
+        sendCommand("C", detail);
+      }
+      
+      pthread_mutex_unlock(&mutex);
+    }
+
+    void setStatusLine(const char* text) {
+      pthread_mutex_lock(&mutex);
+      
+      if ( strcmp(status, text) != 0 ) {
+        strncpy(status, text, MAXCOMMANDLENTH-2); 
+        sendCommand("S", status);
+      }
+      
+      pthread_mutex_unlock(&mutex);
+    }
+
+    void setAlertLine(const char* text) {
+      pthread_mutex_lock(&mutex);
+      if ( strcmp(alert, text) != 0 ) {
+        strncpy(alert, text, MAXCOMMANDLENTH-2);      
+        sendCommand("A", alert);
+      }
+      
+      pthread_mutex_unlock(&mutex);
     }
 
     ~RemoteControlPrivate() {
+      pthread_mutex_destroy(&mutex);
       close(filedesc);
     }
     
   private:
     static RemoteControlPrivate* singleton;
-
+    
+    pthread_mutex_t mutex;
     Mode displayMode;    
     int displayHour;
     int displayMin;
     int filedesc;
+    char status[MAXCOMMANDLENTH];
+    char alert[MAXCOMMANDLENTH];
 
     RemoteControlPrivate()     
     {
+      pthread_mutex_init(&mutex, NULL);
       displayMode = DayClock;
-      displayHour = -1;
-      displayMin = -1;
+      displayHour = 0;
+      displayMin = 0;
+      status[0] = 0;;
+      alert[0] = 0;
       
       struct termios tio;
 

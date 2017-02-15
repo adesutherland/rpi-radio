@@ -7,6 +7,9 @@
 
 #define OLED_TYPE 4
 
+#define MAXCOMMANDLENTH 70 // Arduino memory constrants - I have 3 of these arrays ...
+#define HEARTBEAT_MS 100   // 100ms - i.e. 10 a second
+
 #if (SSD1306_LCDHEIGHT != 64)
 #error("Height incorrect, please fix Adafruit_SSD1306.h!");
 #endif
@@ -15,7 +18,7 @@
 
 AbstractDisplay *slavedisplay;
 
-const byte maxSize = 100;
+const byte maxSize = MAXCOMMANDLENTH - 1;
 char receivedCommand[maxSize+1];
 boolean newCommand = false;
 
@@ -33,6 +36,7 @@ int b = HIGH;
 int c = HIGH;
 
 unsigned long debounceTime = 0;
+unsigned long heartbeatTime = 0;
 unsigned long debounceDelay = 2;
 
 /*
@@ -45,7 +49,7 @@ void setBrightness(Adafruit_SSD1306 display, uint8_t brightness)
 
 void setup()   {                
   Serial.begin(19200);
-
+  
   pinMode (encoderPinA,INPUT);
   digitalWrite(encoderPinA, HIGH);
 
@@ -60,10 +64,21 @@ void setup()   {
   slavedisplay->initiate();
   
   debounceTime = millis();
+  heartbeatTime = millis();
 }
 
 void loop() {
-
+  
+   // Heartbeat
+   if ( millis() < heartbeatTime ) {
+     // Just in case it overflows (after 50 days) 
+     heartbeatTime = millis();
+   }
+   if ( millis() - heartbeatTime >= HEARTBEAT_MS) {
+     heartbeatTime = millis();
+     slavedisplay->heartbeat();
+   }
+   
    readCommand();
 
    if (newCommand) {
@@ -84,6 +99,18 @@ void loop() {
           int h = atoi(receivedCommand+1);
           int m = atoi(receivedCommand+4);
           slavedisplay->setClock(h,m);
+        }
+        break;
+        
+        case 'S': // Set Status
+        {
+          slavedisplay->setStatusLine(receivedCommand+1);
+        }
+        break;
+
+        case 'A': // Set Alert
+        {
+          slavedisplay->setAlertLine(receivedCommand+1);
         }
         break;
         
@@ -113,6 +140,11 @@ void readRotar() {
   
   c = digitalRead(buttonPin);
   if (c != buttonPinLast) {
+    debounceTime = millis();
+  }
+  
+  if ( millis() < debounceTime ) {
+    // Just in case it overflows (after 50 days) 
     debounceTime = millis();
   }
   
