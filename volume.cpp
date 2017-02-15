@@ -28,7 +28,7 @@ int VolumeControl::increaseVolume()
     pa_volume_t newVolume = round( (double)percent * (double)PA_VOLUME_NORM / 100.0);
 
     pulse.set_volume(device, newVolume);
-    return 0;
+    return percent;
   }
   catch (const char* message)
   {
@@ -49,7 +49,7 @@ int VolumeControl::decreaseVolume()
     pa_volume_t newVolume = round( (double)percent * (double)PA_VOLUME_NORM / 100.0);
 
     pulse.set_volume(device, newVolume);
-    return 0;
+    return percent;
   }
   catch (const char* message)
   {

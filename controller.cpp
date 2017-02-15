@@ -3,6 +3,8 @@
  */
  
 #include <iostream>
+#include <string>
+#include <sstream>
 
 #include <sys/select.h>
 #include <stdio.h>
@@ -12,6 +14,8 @@
  
 #include "rpi-radio.h"
 #include "shared/displaylogic.h"
+
+using namespace std;
 
 Controller *Controller::localConsole = NULL;
 Controller *Controller::remoteConsole = NULL;
@@ -96,43 +100,58 @@ void Controller::clearAlert() {
 
 void Controller::handleRotary(char* buffer) {
   
-  if (!buffer) return;
+  if (!buffer) {
+    clearAlert();
+    return;
+  }
   
   for (int i=0; buffer[i]; i++) {
 	  switch (buffer[i]) {
 		  case '.':
         {
-          //			printf(".\n");
           AbstractModule* module = AbstractModule::getCurrent();
           if (module) {
             if (playing) {
               module->stop();               
               playing = false;
+              setDisplayMode();
               clearStatus();
             }
             else {
               module->play();              
               playing = true;
+              setDisplayMode();
               setStatus(module->moduleDesc.c_str());
             }
-            setDisplayMode();
           }
         }
         break;
 
 		  case '^':
-//			printf("^\n");
         break;
 
 		  case '>':
-//			printf(">\n");
-        VolumeControl::increaseVolume();
+        {       
+          if (playing) { 
+            int vol = VolumeControl::increaseVolume();
+            ostringstream s;            
+            s << "Volume " << vol;
+            display->setAlertLine(s.str().c_str());
+          }
+        }
         break;
 			
 		  case '<':
-//			printf("<\n");
-        VolumeControl::decreaseVolume();
+        {    
+          if (playing) {    
+            int vol = VolumeControl::decreaseVolume();
+            ostringstream s;            
+            s << "Volume " << vol;
+            display->setAlertLine(s.str().c_str());
+          }
+        }
         break;
+        
 
 		  default:
 		    ;
@@ -152,7 +171,7 @@ int Controller::handleEvent()
   FD_SET(localConsole->controlSocket, &set);
   FD_SET(remoteConsole->controlSocket, &set);
 
-  timeout.tv_sec = 2;
+  timeout.tv_sec = 2; 
   timeout.tv_usec = 0;
   
   int maxFD = localConsole->controlSocket;
@@ -160,7 +179,7 @@ int Controller::handleEvent()
 
   rc = select(maxFD + 1, &set, NULL, NULL, &timeout);
   if (rc == -1) {
-    perror("select\n"); /* an error accured */
+    perror("select\n");
     return -1;
   }
   
@@ -173,21 +192,17 @@ int Controller::handleEvent()
   if (FD_ISSET(remoteConsole->controlSocket, &set)) { // Slave Response available
     rc = read( remoteConsole->controlSocket, buff, len ); 
     buff[rc] = 0;
-//    printf("slave response: [%s]\n", buff);
     if (remoteConsole->hasFocus) remoteConsole->handleRotary(buff);
   }
 
   if (FD_ISSET(localConsole->controlSocket, &set)) { // Rotary events available
     rc = read( localConsole->controlSocket, buff, len ); 
     buff[rc] = 0;
-//    printf("master response: [%s]\n", buff);
     if (localConsole->hasFocus) localConsole->handleRotary(buff);
   }
 
   return 0;
 }
-
-
 
 static pthread_t clockThread; // Not in the class - sigh!
 static bool stopTheClock = false;
