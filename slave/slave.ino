@@ -65,24 +65,18 @@ void setup()   {
   
   debounceTime = millis();
   heartbeatTime = millis();
+  
+  // Timer0 is already used for millis() - we'll just interrupt somewhere
+  // in the middle and call the "Compare A" function below
+  OCR0A = 0xAF;
+  TIMSK0 |= _BV(OCIE0A);  
 }
 
 void loop() {
-  
-   // Heartbeat
-   if ( millis() < heartbeatTime ) {
-     // Just in case it overflows (after 50 days) 
-     heartbeatTime = millis();
-   }
-   if ( millis() - heartbeatTime >= HEARTBEAT_MS) {
-     heartbeatTime = millis();
-     slavedisplay->heartbeat();
-   }
-   
+     
    readCommand();
 
    if (newCommand) {
-      newCommand = false;
       switch (receivedCommand[0]) {
         
         case 'M': // Set Mode
@@ -125,9 +119,22 @@ void loop() {
           Serial.println("E"); // Invalid Command
       }
    }
+   
+   // Heartbeat
+   if ( millis() < heartbeatTime ) {
+     // Just in case it overflows (after 50 days) 
+     heartbeatTime = millis();
+   }
+   if ( millis() - heartbeatTime >= HEARTBEAT_MS) {
+     heartbeatTime = millis();
+     slavedisplay->heartbeatPrepare();
+     slavedisplay->heartbeatIsolated(); 
+   }
 }
 
-void readRotar() {
+
+// Interrupt is called once a millisecond - rotar control
+SIGNAL(TIMER0_COMPA_vect) {
   a = digitalRead(encoderPinA);
   if (a != encoderPinALast) {
     debounceTime = millis();
@@ -150,20 +157,26 @@ void readRotar() {
   
   if ((millis() - debounceTime) > debounceDelay) {
     if ((encoderPinAState == HIGH) && (a == LOW)) {
-      if (b == LOW) {
-        Serial.print ("<");
-      } else {
-        Serial.print (">");
+      if (Serial.availableForWrite()) {
+        if (b == LOW) {
+          Serial.print ("<");
+        } else {
+          Serial.print (">");
+        }
       }
     } 
     encoderPinAState = a;
     encoderPinBState = b;
   
     if ((buttonPinState == HIGH) && (c == LOW)) {
-      Serial.print (".");
+      if (Serial.availableForWrite()) {
+        Serial.print (".");
+      }
     } 
     else if ((buttonPinState == LOW) && (c == HIGH)) {
-      Serial.print ("^");
+      if (Serial.availableForWrite()) {
+        Serial.print ("^");
+      }
     } 
     buttonPinState = c;
   }
@@ -178,7 +191,7 @@ void readCommand() {
   char endMarker = '\n';
   char rc;
   
-  readRotar();
+  newCommand = false;
 
   while (Serial.available() > 0 && !newCommand) {
     rc = Serial.read();
@@ -195,8 +208,6 @@ void readCommand() {
       ndx = 0;
       newCommand = true;
     }
-    
-    readRotar();
   }
 }
 

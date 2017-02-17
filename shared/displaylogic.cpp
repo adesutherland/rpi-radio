@@ -29,12 +29,35 @@ class LocalDisplayPrivate: public AbstractDisplay {
       if (!singleton) singleton = new LocalDisplayPrivate;
       return singleton;
     }
-    
-    void heartbeat() {
-      if (statusLen > DISP_LEN || alertLen > DISP_LEN) {
+        
+    void heartbeatPrepare() {
+      
+      if (needsUpdating || statusLen > DISP_LEN || alertLen > DISP_LEN) {
         ticks++;
-        updateDisplay();
+#ifdef RPI
+        isolatedDisplayMode = displayMode; 
+        isolatedDisplayHour = displayHour;
+        isolatedDisplayMin = displayMin; 
+        strcpy(isolatedStatus, status);
+        isolatedStatusLen = statusLen;
+        strcpy(isolatedAlert, alert);
+        isolatedAlertLen = alertLen;
+        isolatedTicks = ticks;
+        isolatedNeedsUpdating = true;
+#else
+        updateDisplay(displayMode, displayHour, displayMin, status, statusLen, alert, alertLen, ticks);
+#endif
+        needsUpdating = false;
       }
+    }
+    
+    void heartbeatIsolated() {
+#ifdef RPI
+      if (isolatedNeedsUpdating) {
+        updateDisplay(isolatedDisplayMode, isolatedDisplayHour, isolatedDisplayMin, 
+          isolatedStatus, isolatedStatusLen, isolatedAlert, isolatedAlertLen, isolatedTicks);
+      }
+#endif    
     }
       
     int initiate() {
@@ -63,7 +86,7 @@ class LocalDisplayPrivate: public AbstractDisplay {
     void setMode(Mode mode) {
       if (mode != displayMode) {
         displayMode = mode;
-        updateDisplay();
+        needsUpdating = true;
       }
     }
     
@@ -71,7 +94,7 @@ class LocalDisplayPrivate: public AbstractDisplay {
       if ( (displayHour != hour) || (displayMin != min) ) {
         displayHour = hour;
         displayMin = min;
-        updateDisplay();
+        needsUpdating = true;
       }
     }
     
@@ -79,7 +102,7 @@ class LocalDisplayPrivate: public AbstractDisplay {
       if ( strcmp(status, text) != 0 ) {
         strncpy(status, text, MAXCOMMANDLENTH-2);
         statusLen = strlen(status); 
-        updateDisplay();
+        needsUpdating = true;
       } 
     }     
 
@@ -87,7 +110,7 @@ class LocalDisplayPrivate: public AbstractDisplay {
       if ( strcmp(alert, text) != 0 ) {
         strncpy(alert, text, MAXCOMMANDLENTH-2);
         alertLen = strlen(alert);
-        updateDisplay();
+        needsUpdating = true;
       } 
     }
 
@@ -112,6 +135,19 @@ class LocalDisplayPrivate: public AbstractDisplay {
     int ticks;
     int statusLen;
     int alertLen;
+    bool needsUpdating;
+
+#ifdef RPI
+    Mode isolatedDisplayMode;    
+    int isolatedDisplayHour;
+    int isolatedDisplayMin;
+    char isolatedStatus[MAXCOMMANDLENTH];
+    char isolatedAlert[MAXCOMMANDLENTH];
+    int isolatedStatusLen;
+    int isolatedAlertLen;
+    int isolatedTicks;
+    bool isolatedNeedsUpdating;
+#endif
 
     LocalDisplayPrivate() 
 #ifndef RPI
@@ -127,18 +163,20 @@ class LocalDisplayPrivate: public AbstractDisplay {
       ticks = 0;
       statusLen = 0;
       alertLen = 0;
+      needsUpdating = true;
     }
     
-    void updateDisplay() {
-      
+    void updateDisplay(Mode mode, int hour, int min, 
+      const char* sText, int sLen, const char* aText, int aLen, int tk) {    
+          
       char displayTime[6];
-      snprintf(displayTime, 6, "%02d:%02d", displayHour, displayMin);
+      snprintf(displayTime, 6, "%02d:%02d", hour, min);
             
       display.clearDisplay();
       display.setRotation(2); 
       display.setTextColor(WHITE);
 
-      switch (displayMode) {
+      switch (mode) {
         case DayClock:                
           display.setTextSize(3);  
           display.setCursor(17,22);
@@ -161,7 +199,7 @@ class LocalDisplayPrivate: public AbstractDisplay {
             int y;
                
             // display hour hand
-            angle = (displayHour * 30) + (displayMin / 2);
+            angle = (hour * 30) + (min / 2);
             angle = angle / 57.296; // radians  
             x = sin(angle)*CLOCK_HRAD;
             y = cos(angle)*CLOCK_HRAD;
@@ -183,25 +221,25 @@ class LocalDisplayPrivate: public AbstractDisplay {
             // Status
             display.setTextSize(2);  
             display.setCursor(2,28);
-            if (statusLen > DISP_LEN) {
+            if (sLen > DISP_LEN) {
               // Animate it
-              animate(status, statusLen);
+              animate(sText, sLen, tk);
             }
             else {
               // Centre it
-              centre(status, statusLen);
+              centre(sText, sLen);
             }
 
             // Alert
             display.setTextSize(2);  
             display.setCursor(2,50);
-            if (alertLen > DISP_LEN) {
+            if (aLen > DISP_LEN) {
               // Animate it
-              animate(alert, alertLen);
+              animate(aText, aLen, tk);
             }
             else {
               // Centre it
-              centre(alert, alertLen);
+              centre(aText, aLen);
             }
           }
           break;
@@ -209,8 +247,8 @@ class LocalDisplayPrivate: public AbstractDisplay {
       display.display();
     }
     
-    void animate(char* text, int len) {
-      int step = ticks % (len - DISP_LEN + BEGIN_PAUSE + END_PAUSE);
+    void animate(const char* text, int len, int tk) {
+      int step = tk % (len - DISP_LEN + BEGIN_PAUSE + END_PAUSE);
       if (step <= BEGIN_PAUSE) {
         step = 0;
         // Draw the first characters 
@@ -228,7 +266,7 @@ class LocalDisplayPrivate: public AbstractDisplay {
       }
     }
     
-    void centre(char* text, int len) {
+    void centre(const char* text, int len) {
       int pad=(DISP_LEN - len)/2;
       for (int i=0; i<pad; i++) {
         display.write(' ');

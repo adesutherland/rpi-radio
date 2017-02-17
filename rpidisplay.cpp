@@ -16,7 +16,12 @@ class RPIDisplayPrivate: public AbstractDisplay {
     }
       
     int initiate() {
-      return wrappedDisplay->initiate();
+      int rc = wrappedDisplay->initiate();
+      if (!rc) { 
+        pthread_create( &heartbeatThread, NULL, &staticHeartbeatFunction, NULL);
+        initiated = true;
+      }
+      return rc;
     }
      
     void setMode(Mode mode) {
@@ -44,8 +49,10 @@ class RPIDisplayPrivate: public AbstractDisplay {
     }
 
     ~RPIDisplayPrivate() {
-      pleaseFinish = true; // ask the thread to die
-      pthread_join(heartbeatThread, NULL); // And wait for it to end
+      if (initiated) {
+        pleaseFinish = true; // ask the thread to die
+        pthread_join(heartbeatThread, NULL); // And wait for it to end
+      }
       pthread_mutex_destroy(&mutex);
       singleton = NULL;
       delete wrappedDisplay;
@@ -58,13 +65,14 @@ class RPIDisplayPrivate: public AbstractDisplay {
     bool pleaseFinish;
     pthread_t heartbeatThread;
     struct timespec timeToWait;
+    bool initiated;
 
     RPIDisplayPrivate()     
     {
       pthread_mutex_init(&mutex, NULL);
       wrappedDisplay = LocalDisplay::Factory();
       pleaseFinish = false;
-      pthread_create( &heartbeatThread, NULL, &staticHeartbeatFunction, NULL);
+      initiated = false;
     }
     
     static void *staticHeartbeatFunction(void*) {
@@ -88,10 +96,11 @@ class RPIDisplayPrivate: public AbstractDisplay {
 
         // Call hearbeat
         pthread_mutex_lock(&mutex);
-        wrappedDisplay->heartbeat();      
+        wrappedDisplay->heartbeatPrepare();      
         pthread_mutex_unlock(&mutex);
+        wrappedDisplay->heartbeatIsolated(); 
          
-        // Repeat
+        // Repeat!
       }
     }
 };

@@ -135,7 +135,7 @@ void Controller::handleRotary(char* buffer) {
           if (playing) { 
             int vol = VolumeControl::increaseVolume();
             ostringstream s;            
-            s << "Volume " << vol;
+            s << " Vol " << vol << ">";
             display->setAlertLine(s.str().c_str());
           }
         }
@@ -145,8 +145,8 @@ void Controller::handleRotary(char* buffer) {
         {    
           if (playing) {    
             int vol = VolumeControl::decreaseVolume();
-            ostringstream s;            
-            s << "Volume " << vol;
+            ostringstream s;          
+            s << "<Vol " << vol << " ";  
             display->setAlertLine(s.str().c_str());
           }
         }
