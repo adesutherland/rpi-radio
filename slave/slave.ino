@@ -8,7 +8,6 @@
 #define OLED_TYPE 4
 
 #define MAXCOMMANDLENTH 70 // Arduino memory constrants - I have 3 of these arrays ...
-#define HEARTBEAT_MS 100   // 100ms - i.e. 10 a second
 
 #if (SSD1306_LCDHEIGHT != 64)
 #error("Height incorrect, please fix Adafruit_SSD1306.h!");
@@ -122,7 +121,7 @@ void loop() {
    
    // Heartbeat
    if ( millis() < heartbeatTime ) {
-     // Just in case it overflows (after 50 days) 
+     // Just in case it overflows (after 50 days!) 
      heartbeatTime = millis();
    }
    if ( millis() - heartbeatTime >= HEARTBEAT_MS) {

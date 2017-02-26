@@ -16,10 +16,6 @@
 #include <stdio.h>
 #include <math.h>
 
-#define DISP_LEN 10    // 10 characters
-#define BEGIN_PAUSE 10 // 10 Ticks - 1 second
-#define END_PAUSE 5    // 5 Ticks - 1/2 second
-
 using namespace std;
 
 class LocalDisplayPrivate: public AbstractDisplay {
@@ -248,21 +244,21 @@ class LocalDisplayPrivate: public AbstractDisplay {
     }
     
     void animate(const char* text, int len, int tk) {
-      int step = tk % (len - DISP_LEN + BEGIN_PAUSE + END_PAUSE);
-      if (step <= BEGIN_PAUSE) {
-        step = 0;
-        // Draw the first characters 
-      }
-      else if (step > len - DISP_LEN + BEGIN_PAUSE) {
-        // Draw the end characters
-        step = len - DISP_LEN;
-      }
-      else {
-        // Draw tme middle somewhere
-        step -= BEGIN_PAUSE;
-      }
+
+      int step = tk % (len + DISP_GAP);
+
       for (int i=0; i<DISP_LEN; i++) {
-        display.write(text[ i + step ]);
+        int x = i + step;
+        if (x >= len + DISP_GAP) {
+          x -= len + DISP_GAP;
+          display.write(text[x]);
+        }
+        else if (x >= len) {
+          display.write(' ');
+        }
+        else {
+         display.write(text[x]);
+        }
       }
     }
     

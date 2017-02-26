@@ -2,6 +2,10 @@
 #ifndef RPI_ARDUINO_DISPLAY_LOGIC_H
 #define RPI_ARDUINO_DISPLAY_LOGIC_H
 
+#define DISP_LEN 10      // Characters per line
+#define DISP_GAP 5       // Chars between animated looped text
+#define HEARTBEAT_MS 142 // 142 ms is 7 a second
+
 class AbstractDisplay {
   public:
     enum Mode { 

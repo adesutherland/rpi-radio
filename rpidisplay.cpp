@@ -5,8 +5,6 @@
 #include "shared/displaylogic.h"
 #include <pthread.h>
 
-#define HEARTBEAT_MS 100 // 100ms - i.e. 10 a second
-
 class RPIDisplayPrivate: public AbstractDisplay {
   public:
   
