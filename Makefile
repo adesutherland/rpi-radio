@@ -1,6 +1,6 @@
 # RPI Radio
-TARGET = displaytime
-OBJS += displaytime.o volume.o rotarycontrol.o shared/displaylogic.o remote.o
+TARGET = rpi-radio
+OBJS += rpi-radio.o volume.o rotarycontrol.o shared/displaylogic.o remote.o
 OBJS += abstractmodule.o vlcradio.o rpidisplay.o controller.o
 PAMIXEROBJS += pamixer/pulseaudio.o pamixer/device.o pamixer/callbacks.o
 
@@ -22,12 +22,15 @@ LDFLAGS +=
 LDLIBS += -lvlc -lwiringPi -lpthread -lArduiPi_OLED
 LDLIBS += -lpulse -lboost_program_options
 
-all:	pamixer-project $(TARGET) arduino
+all:	pamixer-project spotify-module $(TARGET) arduino
 
 pamixer-project:
 	make -C pamixer
+	
+spotify-module:
+	make -C spotify
 
-displaytime.o: displaytime.cpp rpi-radio.h shared/displaylogic.h remote.h
+rpi-radio.o: rpi-radio.cpp rpi-radio.h shared/displaylogic.h remote.h
 
 controller.o: controller.cpp rpi-radio.h shared/displaylogic.h
 
@@ -62,12 +65,17 @@ stoptesting:
 
 clean:
 	make -C pamixer clean
+	make -C spotify clean
 	rm -f *.o *~ $(TARGET)
-	rm -f shared/*.o shared/*~ $(TARGET)
+	rm -f shared/*.o shared/*~
+	rm -f configFiles/*~
 	rm -f slave/displaylogic.h
 	rm -f slave/displaylogic_imp.h
 
 INSTALL:
 	-sudo killall $(TARGET)
 	sudo cp $(TARGET) /usr/local/bin
+	sudo cp configFiles/rc.local /etc
+	sudo cp configFiles/asound.conf /etc
+	sudo cp configFiles/daemon.conf /etc/pulse
 	sudo /usr/local/bin/$(TARGET) &	

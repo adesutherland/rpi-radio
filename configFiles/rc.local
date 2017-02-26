@@ -29,6 +29,6 @@ sleep 10
 
 # start rpi-radio
 echo Start RPI Radio
-/usr/local/bin/displaytime &
+/usr/local/bin/rpi-radio &
 
 exit 0
