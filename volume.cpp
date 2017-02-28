@@ -16,6 +16,21 @@ using namespace std;
 
 Pulseaudio VolumeControl::pulse("rpi-radio");
 
+int VolumeControl::getVolume()
+{
+  try
+  {
+    Device device = pulse.get_default_sink();
+    int percent = device.volume_percent;
+    return percent;
+  }
+  catch (const char* message)
+  {
+    cerr << message << endl;
+    return -1;
+  }
+}
+
 int VolumeControl::increaseVolume()
 {
   try

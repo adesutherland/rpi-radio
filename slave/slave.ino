@@ -7,8 +7,6 @@
 
 #define OLED_TYPE 4
 
-#define MAXCOMMANDLENTH 70 // Arduino memory constrants - I have 3 of these arrays ...
-
 #if (SSD1306_LCDHEIGHT != 64)
 #error("Height incorrect, please fix Adafruit_SSD1306.h!");
 #endif

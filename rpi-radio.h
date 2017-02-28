@@ -7,12 +7,11 @@
 #include <string>
 #include <map>
 
-#define MAXCOMMANDLENTH 70 // Arduino memory constrants - I have 3 of these arrays ...
-
 class Pulseaudio;
 
 class VolumeControl {
 public:
+  static int getVolume();
   static int increaseVolume();
   static int decreaseVolume();
 private:
@@ -83,6 +82,14 @@ class AbstractDisplay;
 class Controller {
 public:
   Controller(AbstractDisplay *dsp, int socket);
+  static int mainLoop();
+  static void startClock();
+  static void stopClock();
+  
+  static Controller *localConsole;
+  static Controller *remoteConsole;
+
+private:
   void handleRotary(char* buffer);
   
   static int handleEvent();
@@ -92,20 +99,18 @@ public:
   static void setAlert(const char* text);
   static void clearAlert();
   static void setClock();
-  static int mainLoop();
-  
-  static bool playing;
-  static Controller *localConsole;
-  static Controller *remoteConsole;
-  bool hasFocus;  
-  
   static void *clockFunction(void*);
-  static void startClock();
-  static void stopClock();
+  void grabFocus();
+  void giveUpFocus();
+  static void grabFocus(Controller* controller);
   
-private:
+  static Controller* hasFocus;
+  static bool playing;  
+  
   AbstractDisplay *display;
   int controlSocket;
+  long lastEventSecond;
+  long downSecond;
 };
 
 #endif

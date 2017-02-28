@@ -177,6 +177,18 @@ class LocalDisplayPrivate: public AbstractDisplay {
           display.setTextSize(3);  
           display.setCursor(17,22);
           display.print(displayTime);
+          
+          // Alert
+          display.setTextSize(2);  
+          display.setCursor(2,50);
+          if (aLen > DISP_LEN) {
+            // Animate it
+            animate(aText, aLen, tk);
+          }
+          else {
+            // Centre it
+            centre(aText, aLen);
+          }
           break;
           
         case DuskClock:
@@ -267,7 +279,7 @@ class LocalDisplayPrivate: public AbstractDisplay {
       for (int i=0; i<pad; i++) {
         display.write(' ');
       }
-      for (int i=0; text[i]; i++) {
+      for (int i=0; i<len; i++) {
         display.write(text[i]);
       }
     }

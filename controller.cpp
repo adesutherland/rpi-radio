@@ -19,12 +19,26 @@ using namespace std;
 
 Controller *Controller::localConsole = NULL;
 Controller *Controller::remoteConsole = NULL;
+Controller *Controller::hasFocus = NULL;
 bool Controller::playing = false;
 
 Controller::Controller(AbstractDisplay *dsp, int socketForController) {
   display = dsp;
   controlSocket = socketForController;
-  hasFocus = true;  
+  lastEventSecond = 0;
+  downSecond = -1;
+}
+
+void Controller::grabFocus() {
+  grabFocus(this);
+}
+
+void Controller::giveUpFocus() {
+  hasFocus = NULL;
+}
+
+void Controller::grabFocus(Controller* controller) {
+  hasFocus = controller;
 }
 
 void Controller::setDisplayMode() {
@@ -99,40 +113,84 @@ void Controller::clearAlert() {
 }
 
 void Controller::handleRotary(char* buffer) {
+
+  AbstractModule* module = AbstractModule::getCurrent();
   
   if (!buffer) {
-    clearAlert();
+    if (time(NULL) - lastEventSecond > 2) {
+      display->setAlertLine("");
+      giveUpFocus();
+      if (downSecond != -1) {
+        downSecond = -1;
+        // Process Press
+        if (module) {
+          if (playing) {
+            grabFocus();
+            display->setAlertLine("Turn Off");
+            module->stop();               
+            playing = false;
+            setDisplayMode();
+            clearStatus();
+          }
+        }
+      }
+    }
     return;
   }
+  lastEventSecond = time(NULL);
   
   for (int i=0; buffer[i]; i++) {
 	  switch (buffer[i]) {
 		  case '.':
+        downSecond = time(NULL);
+        break;
+
+		  case '^':
         {
-          AbstractModule* module = AbstractModule::getCurrent();
-          if (module) {
-            if (playing) {
-              module->stop();               
-              playing = false;
-              setDisplayMode();
-              clearStatus();
+          if (downSecond != -1) {
+            bool longPress = false;
+            if (time(NULL) - downSecond > 1) longPress = true;
+            downSecond = -1;
+          
+            if (module) {
+              if (playing) {
+                if (longPress) {
+                  grabFocus();
+                  display->setAlertLine("Turn Off");
+                  module->stop();               
+                  playing = false;
+                  setDisplayMode();
+                  clearStatus();
+                }
+                else {
+                  grabFocus();
+                  int vol = VolumeControl::getVolume();
+                  ostringstream s;            
+                  s << " Vol " << vol;
+                  display->setAlertLine(s.str().c_str());
+                }
+              }
+              else {
+                grabFocus();
+                display->setAlertLine("Turn On");
+                module->play();              
+                playing = true;
+                setDisplayMode();
+                setStatus(module->moduleDesc.c_str());
+              }
             }
             else {
-              module->play();              
-              playing = true;
-              setDisplayMode();
-              setStatus(module->moduleDesc.c_str());
+              grabFocus();
+              display->setAlertLine("No Module");
             }
           }
         }
         break;
 
-		  case '^':
-        break;
-
 		  case '>':
         {       
           if (playing) { 
+            grabFocus();
             int vol = VolumeControl::increaseVolume();
             ostringstream s;            
             s << " Vol " << vol << ">";
@@ -144,6 +202,7 @@ void Controller::handleRotary(char* buffer) {
 		  case '<':
         {    
           if (playing) {    
+            grabFocus();
             int vol = VolumeControl::decreaseVolume();
             ostringstream s;          
             s << "<Vol " << vol << " ";  
@@ -159,8 +218,7 @@ void Controller::handleRotary(char* buffer) {
   }
 }
 
-int Controller::handleEvent()
-{
+int Controller::handleEvent() {
   fd_set set;
   struct timeval timeout;
   int rc;
@@ -171,7 +229,7 @@ int Controller::handleEvent()
   FD_SET(localConsole->controlSocket, &set);
   FD_SET(remoteConsole->controlSocket, &set);
 
-  timeout.tv_sec = 2; 
+  timeout.tv_sec = 1; 
   timeout.tv_usec = 0;
   
   int maxFD = localConsole->controlSocket;
@@ -184,22 +242,28 @@ int Controller::handleEvent()
   }
   
   if (rc == 0) {
-    if (remoteConsole->hasFocus) remoteConsole->handleRotary(NULL);
-    if (localConsole->hasFocus) localConsole->handleRotary(NULL);
+    if (hasFocus) hasFocus->handleRotary(NULL);
+    else {
+      remoteConsole->handleRotary(NULL);
+      localConsole->handleRotary(NULL);
+    }
     return 0;
   }
   
   if (FD_ISSET(remoteConsole->controlSocket, &set)) { // Slave Response available
     rc = read( remoteConsole->controlSocket, buff, len ); 
     buff[rc] = 0;
-    if (remoteConsole->hasFocus) remoteConsole->handleRotary(buff);
+    if (!hasFocus || remoteConsole == hasFocus) remoteConsole->handleRotary(buff);
   }
 
   if (FD_ISSET(localConsole->controlSocket, &set)) { // Rotary events available
     rc = read( localConsole->controlSocket, buff, len ); 
     buff[rc] = 0;
-    if (localConsole->hasFocus) localConsole->handleRotary(buff);
+    if (!hasFocus || localConsole == hasFocus) localConsole->handleRotary(buff);
   }
+  
+  // Make sure we send an event to the focused controller
+  if (hasFocus) hasFocus->handleRotary(NULL);
 
   return 0;
 }
